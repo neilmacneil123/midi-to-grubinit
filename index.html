@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIDI to GRUB_INIT_TUNE Converter</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 800px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 2em;
+        }
+
+        .subtitle {
+            text-align: center;
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 0.9em;
+        }
+
+        .upload-area {
+            border: 3px dashed #667eea;
+            border-radius: 15px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-bottom: 20px;
+            background: #f8f9ff;
+        }
+
+        .upload-area:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+
+        .upload-area.drag-over {
+            background: #e8ebff;
+            border-color: #764ba2;
+        }
+
+        .upload-icon {
+            font-size: 3em;
+            margin-bottom: 10px;
+        }
+
+        .upload-text {
+            color: #666;
+            margin-bottom: 10px;
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 1em;
+            transition: transform 0.2s ease;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .output-area {
+            margin-top: 30px;
+            display: none;
+        }
+
+        .output-label {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 10px;
+            display: block;
+        }
+
+        .output-box {
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            word-wrap: break-word;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        }
+
+        .info-section {
+            background: #f0f2ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+
+        .info-section h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+
+        .info-section ul {
+            margin-left: 20px;
+            color: #555;
+        }
+
+        .info-section li {
+            margin: 5px 0;
+        }
+
+        .status {
+            text-align: center;
+            padding: 10px;
+            margin-top: 15px;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .button-group {
+            text-align: center;
+            margin-top: 15px;
+        }
+
+        .file-info {
+            text-align: center;
+            color: #666;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎵 MIDI to GRUB_INIT_TUNE</h1>
+        <p class="subtitle">Convert your MIDI files to GRUB bootloader tunes</p>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">📁</div>
+            <div class="upload-text">
+                <strong>Click to upload</strong> or drag and drop your MIDI file here
+            </div>
+            <div style="color: #999; font-size: 0.8em;">Supports .mid and .midi files</div>
+        </div>
+
+        <input type="file" id="fileInput" accept=".mid,.midi">
+        
+        <div class="file-info" id="fileInfo"></div>
+
+        <div class="status" id="status"></div>
+
+        <div class="output-area" id="outputArea">
+            <label class="output-label">GRUB_INIT_TUNE Output:</label>
+            <div class="output-box" id="output"></div>
+            
+            <div class="button-group">
+                <button class="btn" id="copyBtn">📋 Copy to Clipboard</button>
+                <button class="btn" id="downloadBtn">💾 Download as .txt</button>
+            </div>
+        </div>
+
+        <div class="info-section">
+            <h3>How to use:</h3>
+            <ul>
+                <li>Upload a MIDI file (.mid or .midi)</li>
+                <li>The converter will extract notes from the first track</li>
+                <li>Copy the output and add it to your GRUB configuration</li>
+                <li>Add the line to <code>/etc/default/grub</code></li>
+                <li>Run <code>sudo update-grub</code> to apply changes</li>
+            </ul>
+        </div>
+    </div>
+
+    <script>
+        // MIDI note to frequency conversion (A4 = 440 Hz)
+        function midiNoteToFrequency(note) {
+            return Math.round(440 * Math.pow(2, (note - 69) / 12));
+        }
+
+        // Parse MIDI file
+        function parseMIDI(arrayBuffer) {
+            const view = new DataView(arrayBuffer);
+            let offset = 0;
+
+            // Read header chunk
+            const headerChunk = String.fromCharCode(view.getUint8(offset++), view.getUint8(offset++), 
+                                                     view.getUint8(offset++), view.getUint8(offset++));
+            
+            if (headerChunk !== 'MThd') {
+                throw new Error('Invalid MIDI file: Missing MThd header');
+            }
+
+            offset += 4; // Skip header length (always 6)
+            const format = view.getUint16(offset);
+            offset += 2;
+            const numTracks = view.getUint16(offset);
+            offset += 2;
+            const timeDivision = view.getUint16(offset);
+            offset += 2;
+
+            // Calculate ticks per quarter note
+            const ticksPerQuarterNote = timeDivision & 0x7FFF;
+
+            // Read track chunk
+            const trackChunk = String.fromCharCode(view.getUint8(offset++), view.getUint8(offset++), 
+                                                    view.getUint8(offset++), view.getUint8(offset++));
+            
+            if (trackChunk !== 'MTrk') {
+                throw new Error('Invalid MIDI file: Missing MTrk header');
+            }
+
+            const trackLength = view.getUint32(offset);
+            offset += 4;
+            const trackEnd = offset + trackLength;
+
+            // Parse events
+            const notes = [];
+            let currentTempo = 500000; // Default tempo (120 BPM)
+            let runningStatus = 0;
+
+            while (offset < trackEnd && offset < view.byteLength) {
+                // Read delta time
+                let deltaTime = 0;
+                let byte;
+                do {
+                    byte = view.getUint8(offset++);
+                    deltaTime = (deltaTime << 7) | (byte & 0x7F);
+                } while (byte & 0x80);
+
+                // Read event
+                let eventType = view.getUint8(offset);
+                
+                // Handle running status
+                if (eventType < 0x80) {
+                    eventType = runningStatus;
+                    offset--;
+                }
+                
+                offset++;
+                const channel = eventType & 0x0F;
+                const command = eventType & 0xF0;
+
+                if (command === 0x90 || command === 0x80) { // Note On or Note Off
+                    const note = view.getUint8(offset++);
+                    const velocity = view.getUint8(offset++);
+                    
+                    if (command === 0x90 && velocity > 0) {
+                        notes.push({
+                            deltaTime: deltaTime,
+                            note: note,
+                            velocity: velocity
+                        });
+                    }
+                    
+                    runningStatus = eventType;
+                } else if (command === 0xB0) { // Control Change
+                    offset += 2;
+                    runningStatus = eventType;
+                } else if (command === 0xC0 || command === 0xD0) { // Program Change or Channel Pressure
+                    offset += 1;
+                    runningStatus = eventType;
+                } else if (command === 0xE0) { // Pitch Bend
+                    offset += 2;
+                    runningStatus = eventType;
+                } else if (eventType === 0xFF) { // Meta Event
+                    const metaType = view.getUint8(offset++);
+                    let length = 0;
+                    do {
+                        byte = view.getUint8(offset++);
+                        length = (length << 7) | (byte & 0x7F);
+                    } while (byte & 0x80);
+                    
+                    if (metaType === 0x51 && length === 3) { // Set Tempo
+                        currentTempo = (view.getUint8(offset) << 16) | 
+                                      (view.getUint8(offset + 1) << 8) | 
+                                       view.getUint8(offset + 2);
+                    }
+                    
+                    offset += length;
+                } else if (eventType === 0xF0 || eventType === 0xF7) { // SysEx
+                    let length = 0;
+                    do {
+                        byte = view.getUint8(offset++);
+                        length = (length << 7) | (byte & 0x7F);
+                    } while (byte & 0x80);
+                    offset += length;
+                }
+            }
+
+            // Calculate BPM from tempo
+            const bpm = Math.round(60000000 / currentTempo);
+
+            return { notes, ticksPerQuarterNote, bpm };
+        }
+
+        // Convert MIDI to GRUB_INIT_TUNE
+        function convertToGrubTune(midiData) {
+            const { notes, ticksPerQuarterNote, bpm } = midiData;
+            
+            if (notes.length === 0) {
+                throw new Error('No notes found in MIDI file');
+            }
+
+            // Use tempo from MIDI or default to 120 BPM
+            const tempo = bpm || 120;
+            
+            let grubTune = `GRUB_INIT_TUNE="${tempo}`;
+            
+            // Convert notes
+            for (let i = 0; i < Math.min(notes.length, 100); i++) { // Limit to 100 notes for GRUB
+                const note = notes[i];
+                const frequency = midiNoteToFrequency(note.note);
+                
+                // Calculate duration based on delta time
+                // Convert ticks to duration units (approximate)
+                const duration = Math.max(1, Math.round(note.deltaTime / (ticksPerQuarterNote / 4)));
+                
+                grubTune += ` ${frequency} ${duration}`;
+            }
+            
+            grubTune += '"';
+            
+            return grubTune;
+        }
+
+        // UI Elements
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const fileInfo = document.getElementById('fileInfo');
+        const status = document.getElementById('status');
+        const outputArea = document.getElementById('outputArea');
+        const output = document.getElementById('output');
+        const copyBtn = document.getElementById('copyBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let currentOutput = '';
+
+        // Show status message
+        function showStatus(message, isError = false) {
+            status.textContent = message;
+            status.className = 'status ' + (isError ? 'error' : 'success');
+            status.style.display = 'block';
+            
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        // Handle file upload
+        function handleFile(file) {
+            if (!file) return;
+
+            if (!file.name.match(/\.(mid|midi)$/i)) {
+                showStatus('Please upload a valid MIDI file (.mid or .midi)', true);
+                return;
+            }
+
+            fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
+
+            const reader = new FileReader();
+            
+            reader.onload = function(e) {
+                try {
+                    const arrayBuffer = e.target.result;
+                    const midiData = parseMIDI(arrayBuffer);
+                    const grubTune = convertToGrubTune(midiData);
+                    
+                    currentOutput = grubTune;
+                    output.textContent = grubTune;
+                    outputArea.style.display = 'block';
+                    
+                    showStatus('✓ Conversion successful!');
+                } catch (error) {
+                    showStatus('Error: ' + error.message, true);
+                    console.error(error);
+                    outputArea.style.display = 'none';
+                }
+            };
+            
+            reader.onerror = function() {
+                showStatus('Error reading file', true);
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Upload area click
+        uploadArea.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
+
+        // Drag and drop
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        // Copy to clipboard
+        copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(currentOutput).then(() => {
+                showStatus('✓ Copied to clipboard!');
+            }).catch(() => {
+                showStatus('Failed to copy to clipboard', true);
+            });
+        });
+
+        // Download as file
+        downloadBtn.addEventListener('click', () => {
+            const blob = new Blob([currentOutput], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'grub_init_tune.txt';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showStatus('✓ File downloaded!');
+        });
+    </script>
+</body>
+</html>
