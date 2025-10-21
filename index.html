@@ -201,10 +201,23 @@
         <div class="status" id="status"></div>
 
         <div class="output-area" id="outputArea">
+            <div style="margin-bottom: 20px;">
+                <label for="tempoInput" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">
+                    Tempo (BPM):
+                </label>
+                <input type="number" id="tempoInput" min="20" max="300" value="120"
+                       style="padding: 8px; border: 2px solid #667eea; border-radius: 5px; font-size: 1em; width: 100px;">
+                <button class="btn" id="updateTempoBtn" style="margin-left: 10px;">🔄 Update Tempo</button>
+                <div style="margin-top: 5px; font-size: 0.85em; color: #666;">
+                    Adjust if the detected tempo seems incorrect
+                </div>
+            </div>
             <label class="output-label">GRUB_INIT_TUNE Output:</label>
             <div class="output-box" id="output"></div>
             
             <div class="button-group">
+                <button class="btn" id="playBtn">▶️ Play Tune</button>
+                <button class="btn" id="stopBtn" style="display:none;">⏹️ Stop</button>
                 <button class="btn" id="copyBtn">📋 Copy to Clipboard</button>
                 <button class="btn" id="downloadBtn">💾 Download as .txt</button>
             </div>
@@ -362,9 +375,11 @@
                 const note = notes[i];
                 const frequency = midiNoteToFrequency(note.note);
                 
-                // Calculate duration based on delta time
-                // Convert ticks to duration units (approximate)
-                const duration = Math.max(1, Math.round(note.deltaTime / (ticksPerQuarterNote / 4)));
+                // Calculate duration: convert MIDI ticks to quarter-note beats
+                // deltaTime is in MIDI ticks, ticksPerQuarterNote is ticks per quarter note
+                // So duration in quarter notes = deltaTime / ticksPerQuarterNote
+                const durationInBeats = note.deltaTime / ticksPerQuarterNote;
+                const duration = Math.max(1, Math.round(durationInBeats * 4)); // Scale to reasonable GRUB durations
                 
                 grubTune += ` ${frequency} ${duration}`;
             }
@@ -383,8 +398,16 @@
         const output = document.getElementById('output');
         const copyBtn = document.getElementById('copyBtn');
         const downloadBtn = document.getElementById('downloadBtn');
+        const playBtn = document.getElementById('playBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const tempoInput = document.getElementById('tempoInput');
+        const updateTempoBtn = document.getElementById('updateTempoBtn');
 
         let currentOutput = '';
+        let currentMidiData = null;
+        let audioContext = null;
+        let isPlaying = false;
+        let stopPlayback = false;
 
         // Show status message
         function showStatus(message, isError = false) {
@@ -414,13 +437,18 @@
                 try {
                     const arrayBuffer = e.target.result;
                     const midiData = parseMIDI(arrayBuffer);
+                    currentMidiData = midiData;
+                    
+                    // Set detected tempo in input field
+                    tempoInput.value = midiData.bpm || 120;
+                    
                     const grubTune = convertToGrubTune(midiData);
                     
                     currentOutput = grubTune;
                     output.textContent = grubTune;
                     outputArea.style.display = 'block';
                     
-                    showStatus('✓ Conversion successful!');
+                    showStatus('✓ Conversion successful! Detected tempo: ' + (midiData.bpm || 120) + ' BPM');
                 } catch (error) {
                     showStatus('Error: ' + error.message, true);
                     console.error(error);
@@ -463,6 +491,30 @@
 
         // Copy to clipboard
         copyBtn.addEventListener('click', () => {
+        // Update tempo and regenerate
+        updateTempoBtn.addEventListener('click', () => {
+            if (!currentMidiData) {
+                showStatus('Please upload a MIDI file first', true);
+                return;
+            }
+            
+            const newTempo = parseInt(tempoInput.value);
+            if (isNaN(newTempo) || newTempo < 20 || newTempo > 300) {
+                showStatus('Please enter a valid tempo (20-300 BPM)', true);
+                return;
+            }
+            
+            // Update the BPM in the MIDI data
+            currentMidiData.bpm = newTempo;
+            
+            // Regenerate GRUB tune with new tempo
+            const grubTune = convertToGrubTune(currentMidiData);
+            currentOutput = grubTune;
+            output.textContent = grubTune;
+            
+            showStatus('✓ Tempo updated to ' + newTempo + ' BPM');
+        });
+
             navigator.clipboard.writeText(currentOutput).then(() => {
                 showStatus('✓ Copied to clipboard!');
             }).catch(() => {
@@ -482,6 +534,113 @@
             document.body.removeChild(a);
             URL.revokeObjectURL(url);
             showStatus('✓ File downloaded!');
+        });
+
+        // Play tune using Web Audio API (based on grub-tune-tester implementation)
+        async function playTune(grubTuneString) {
+            // Parse GRUB_INIT_TUNE format
+            const match = grubTuneString.match(/GRUB_INIT_TUNE="(\d+)((?:\s+\d+\s+\d+)+)"/);
+            if (!match) {
+                showStatus('Invalid GRUB_INIT_TUNE format', true);
+                return;
+            }
+
+            const tempo = parseInt(match[1]);
+            const noteString = match[2].trim();
+            const noteParts = noteString.split(/\s+/);
+            
+            const notes = [];
+            for (let i = 0; i < noteParts.length; i += 2) {
+                if (i + 1 < noteParts.length) {
+                    notes.push({
+                        frequency: parseInt(noteParts[i]),
+                        duration: parseInt(noteParts[i + 1])
+                    });
+                }
+            }
+
+            if (notes.length === 0) {
+                showStatus('No notes to play', true);
+                return;
+            }
+
+            // Initialize Web Audio API
+            if (!audioContext) {
+                audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            }
+
+            isPlaying = true;
+            stopPlayback = false;
+            playBtn.style.display = 'none';
+            stopBtn.style.display = 'inline-block';
+
+            let baseTime = audioContext.currentTime;
+            let totalDuration = 0;
+
+            for (let i = 0; i < notes.length; i++) {
+                if (stopPlayback) break;
+
+                const note = notes[i];
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                // Calculate note duration: (60 / tempo) * duration
+                const noteDuration = (60 / tempo) * note.duration;
+                
+                oscillator.type = 'square'; // PC speaker-like sound
+                oscillator.frequency.value = note.frequency;
+                
+                // Constant gain (like PC speaker)
+                gainNode.gain.value = 0.125;
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                oscillator.start(baseTime);
+                oscillator.stop(baseTime + noteDuration);
+
+                // Store oscillator for cleanup
+                notes[i].oscillator = oscillator;
+
+                baseTime += noteDuration;
+                totalDuration += noteDuration;
+            }
+
+            // Schedule stop button update
+            setTimeout(() => {
+                if (!stopPlayback) {
+                    isPlaying = false;
+                    playBtn.style.display = 'inline-block';
+                    stopBtn.style.display = 'none';
+                    showStatus('✓ Playback finished!');
+                }
+            }, totalDuration * 1000);
+        }
+
+        // Play button
+        playBtn.addEventListener('click', () => {
+            if (!currentOutput) {
+                showStatus('No tune to play', true);
+                return;
+            }
+            playTune(currentOutput);
+        });
+
+        // Stop button
+        stopBtn.addEventListener('click', () => {
+            stopPlayback = true;
+            isPlaying = false;
+            playBtn.style.display = 'inline-block';
+            stopBtn.style.display = 'none';
+            
+            // Close and recreate audio context to stop all sounds immediately
+            if (audioContext) {
+                audioContext.close().then(() => {
+                    audioContext = null;
+                });
+            }
+            
+            showStatus('⏹️ Playback stopped');
         });
     </script>
 </body>
