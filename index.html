@@ -203,15 +203,32 @@
 
         <div class="output-area" id="outputArea" role="region" aria-live="polite">
             <div style="margin-bottom: 20px;">
-                <label for="tempoInput" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">
-                    Tempo (BPM):
-                </label>
-                <input type="number" id="tempoInput" min="20" max="300" value="120"
-                       style="padding: 8px; border: 2px solid #667eea; border-radius: 5px; font-size: 1em; width: 100px;"
-                       aria-describedby="tempoHelp">
-                <button class="btn" id="updateTempoBtn" style="margin-left: 10px;">🔄 Update Tempo</button>
+                <div style="display: flex; gap: 15px; align-items: flex-start; flex-wrap: wrap;">
+                    <div>
+                        <label for="tempoInput" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">
+                            Tempo (BPM):
+                        </label>
+                        <input type="number" id="tempoInput" min="20" max="800" value="120"
+                               style="padding: 8px; border: 2px solid #667eea; border-radius: 5px; font-size: 1em; width: 100px;"
+                               aria-describedby="tempoHelp">
+                    </div>
+                    <div>
+                        <label for="speedMultiplier" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">
+                            Speed Multiplier:
+                        </label>
+                        <select id="speedMultiplier" style="padding: 8px; border: 2px solid #667eea; border-radius: 5px; font-size: 1em;">
+                            <option value="1">1x (Normal)</option>
+                            <option value="1.5">1.5x (Faster)</option>
+                            <option value="2">2x (Double)</option>
+                            <option value="2.5">2.5x (Very Fast)</option>
+                            <option value="3">3x (Ultra Fast)</option>
+                            <option value="4">4x (Extreme)</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn" id="updateTempoBtn" style="margin-top: 10px;">🔄 Update Settings</button>
                 <div id="tempoHelp" style="margin-top: 5px; font-size: 0.85em; color: #666;">
-                    Adjust if the detected tempo seems incorrect (20-300 BPM)
+                    Fast songs like metal/rock often need 2-3x speed multiplier. Max tempo: 800 BPM.
                 </div>
             </div>
             <label class="output-label" for="output">GRUB_INIT_TUNE Output:</label>
@@ -253,7 +270,7 @@
             A4_MIDI_NOTE: 69,
             MAX_GRUB_NOTES: 100,
             MIN_BPM: 20,
-            MAX_BPM: 300,
+            MAX_BPM: 800,
             DEFAULT_BPM: 120
         };
         
@@ -503,7 +520,7 @@
          * @param {number} [customTempo] - Optional custom tempo to override detected tempo
          * @returns {string} GRUB_INIT_TUNE formatted string
          */
-        function convertToGrubTune(midiData, customTempo = null) {
+        function convertToGrubTune(midiData, customTempo = null, speedMultiplier = 1) {
             try {
                 const { notes, ticksPerQuarterNote, bpm } = midiData;
                 
@@ -516,11 +533,14 @@
                 }
 
                 // Use custom tempo if provided, otherwise use detected tempo, or default
-                const tempo = customTempo || bpm || MIDI_CONSTANTS.DEFAULT_BPM;
+                let baseTempo = customTempo || bpm || MIDI_CONSTANTS.DEFAULT_BPM;
+                
+                // Apply speed multiplier
+                const tempo = Math.round(baseTempo * speedMultiplier);
                 
                 // Validate tempo
                 if (tempo < MIDI_CONSTANTS.MIN_BPM || tempo > MIDI_CONSTANTS.MAX_BPM) {
-                    throw new Error(`Tempo must be between ${MIDI_CONSTANTS.MIN_BPM} and ${MIDI_CONSTANTS.MAX_BPM} BPM`);
+                    throw new Error(`Final tempo must be between ${MIDI_CONSTANTS.MIN_BPM} and ${MIDI_CONSTANTS.MAX_BPM} BPM`);
                 }
                 
                 let grubTune = `GRUB_INIT_TUNE="${tempo}`;
@@ -535,9 +555,21 @@
                         const frequency = midiNoteToFrequency(note.note);
                         
                         // Calculate duration: convert MIDI ticks to quarter-note beats
+                        // For deltaTime of 0 (simultaneous notes), use a small default
+                        if (note.deltaTime === 0) {
+                            // Skip notes with 0 deltaTime (they would be simultaneous)
+                            // GRUB can't play chords, so we skip these
+                            continue;
+                        }
+                        
                         const durationInBeats = note.deltaTime / ticksPerQuarterNote;
-                        // Scale to reasonable GRUB durations, minimum 1
-                        const duration = Math.max(1, Math.round(durationInBeats * 4));
+                        
+                        // Improved scaling for GRUB durations
+                        // Adjust duration scaling based on speed multiplier
+                        let duration = Math.round(durationInBeats * (32 / speedMultiplier));
+                        
+                        // Ensure reasonable bounds: minimum 1, maximum 32
+                        duration = Math.max(1, Math.min(duration, 32));
                         
                         grubTune += ` ${frequency} ${duration}`;
                     } catch (noteError) {
