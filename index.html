@@ -213,6 +213,7 @@
 </head>
 <body>
     <div class="container">
+        <div style="text-align: center; color: #999; font-size: 0.75em; margin-bottom: 10px;">v2.0-debug (Multi-track support)</div>
         <h1>🎵 MIDI to GRUB_INIT_TUNE</h1>
         <p class="subtitle">Convert your MIDI files to GRUB bootloader tunes</p>
 
@@ -837,6 +838,9 @@
                     });
                 }
             }
+
+            console.log('[Playback] Tempo:', tempo);
+            console.log('[Playback] First 10 notes:', notes.slice(0, 10));
 
             if (notes.length === 0) {
                 showStatus('No notes to play', true);
