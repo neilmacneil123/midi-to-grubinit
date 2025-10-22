@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>MIDI to GRUB_INIT_TUNE Converter</title>
+    <meta name="description" content="Convert MIDI files to GRUB bootloader initialization tunes">
     <style>
         * {
             margin: 0;
@@ -186,34 +187,35 @@
         <h1>🎵 MIDI to GRUB_INIT_TUNE</h1>
         <p class="subtitle">Convert your MIDI files to GRUB bootloader tunes</p>
 
-        <div class="upload-area" id="uploadArea">
-            <div class="upload-icon">📁</div>
+        <div class="upload-area" id="uploadArea" role="button" tabindex="0" aria-label="Upload MIDI file">
+            <div class="upload-icon" aria-hidden="true">📁</div>
             <div class="upload-text">
                 <strong>Click to upload</strong> or drag and drop your MIDI file here
             </div>
             <div style="color: #999; font-size: 0.8em;">Supports .mid and .midi files</div>
         </div>
 
-        <input type="file" id="fileInput" accept=".mid,.midi">
+        <input type="file" id="fileInput" accept=".mid,.midi" aria-label="Select MIDI file">
         
         <div class="file-info" id="fileInfo"></div>
 
         <div class="status" id="status"></div>
 
-        <div class="output-area" id="outputArea">
+        <div class="output-area" id="outputArea" role="region" aria-live="polite">
             <div style="margin-bottom: 20px;">
                 <label for="tempoInput" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">
                     Tempo (BPM):
                 </label>
                 <input type="number" id="tempoInput" min="20" max="300" value="120"
-                       style="padding: 8px; border: 2px solid #667eea; border-radius: 5px; font-size: 1em; width: 100px;">
+                       style="padding: 8px; border: 2px solid #667eea; border-radius: 5px; font-size: 1em; width: 100px;"
+                       aria-describedby="tempoHelp">
                 <button class="btn" id="updateTempoBtn" style="margin-left: 10px;">🔄 Update Tempo</button>
-                <div style="margin-top: 5px; font-size: 0.85em; color: #666;">
-                    Adjust if the detected tempo seems incorrect
+                <div id="tempoHelp" style="margin-top: 5px; font-size: 0.85em; color: #666;">
+                    Adjust if the detected tempo seems incorrect (20-300 BPM)
                 </div>
             </div>
-            <label class="output-label">GRUB_INIT_TUNE Output:</label>
-            <div class="output-box" id="output"></div>
+            <label class="output-label" for="output">GRUB_INIT_TUNE Output:</label>
+            <div class="output-box" id="output" role="textbox" aria-readonly="true"></div>
             
             <div class="button-group">
                 <button class="btn" id="playBtn">▶️ Play Tune</button>
@@ -236,129 +238,272 @@
     </div>
 
     <script>
-        // MIDI note to frequency conversion (A4 = 440 Hz)
+        'use strict';
+        
+        // ============================================================================
+        // CONSTANTS
+        // ============================================================================
+        
+        const MIDI_CONSTANTS = {
+            HEADER_CHUNK: 'MThd',
+            TRACK_CHUNK: 'MTrk',
+            HEADER_LENGTH: 6,
+            DEFAULT_TEMPO: 500000, // microseconds per quarter note (120 BPM)
+            A4_FREQUENCY: 440,
+            A4_MIDI_NOTE: 69,
+            MAX_GRUB_NOTES: 100,
+            MIN_BPM: 20,
+            MAX_BPM: 300,
+            DEFAULT_BPM: 120
+        };
+        
+        const MIDI_COMMANDS = {
+            NOTE_OFF: 0x80,
+            NOTE_ON: 0x90,
+            CONTROL_CHANGE: 0xB0,
+            PROGRAM_CHANGE: 0xC0,
+            CHANNEL_PRESSURE: 0xD0,
+            PITCH_BEND: 0xE0,
+            META_EVENT: 0xFF,
+            SYSEX_START: 0xF0,
+            SYSEX_END: 0xF7
+        };
+        
+        const META_EVENTS = {
+            SET_TEMPO: 0x51
+        };
+        
+        const STATUS_TIMEOUT = 5000; // milliseconds
+        const AUDIO_GAIN = 0.125; // Volume level for playback
+        
+        // ============================================================================
+        // MIDI PARSING MODULE
+        // ============================================================================
+        
+        /**
+         * Converts a MIDI note number to frequency in Hz
+         * @param {number} note - MIDI note number (0-127)
+         * @returns {number} Frequency in Hz
+         */
         function midiNoteToFrequency(note) {
-            return Math.round(440 * Math.pow(2, (note - 69) / 12));
+            if (note < 0 || note > 127) {
+                throw new Error(`Invalid MIDI note: ${note}. Must be between 0 and 127.`);
+            }
+            return Math.round(
+                MIDI_CONSTANTS.A4_FREQUENCY *
+                Math.pow(2, (note - MIDI_CONSTANTS.A4_MIDI_NOTE) / 12)
+            );
         }
-
-        // Parse MIDI file
+        
+        /**
+         * Reads a variable-length quantity from MIDI data
+         * @param {DataView} view - DataView of MIDI data
+         * @param {number} offset - Current offset in the data
+         * @returns {{value: number, bytesRead: number}} The value and number of bytes read
+         */
+        function readVariableLength(view, offset) {
+            let value = 0;
+            let bytesRead = 0;
+            let byte;
+            
+            do {
+                if (offset + bytesRead >= view.byteLength) {
+                    throw new Error('Unexpected end of file while reading variable length value');
+                }
+                byte = view.getUint8(offset + bytesRead);
+                value = (value << 7) | (byte & 0x7F);
+                bytesRead++;
+                
+                // Prevent infinite loops with malformed data
+                if (bytesRead > 4) {
+                    throw new Error('Invalid variable length quantity');
+                }
+            } while (byte & 0x80);
+            
+            return { value, bytesRead };
+        }
+        
+        /**
+         * Reads a chunk identifier from MIDI data
+         * @param {DataView} view - DataView of MIDI data
+         * @param {number} offset - Current offset in the data
+         * @returns {string} Four-character chunk identifier
+         */
+        function readChunkId(view, offset) {
+            if (offset + 4 > view.byteLength) {
+                throw new Error('Unexpected end of file while reading chunk ID');
+            }
+            return String.fromCharCode(
+                view.getUint8(offset),
+                view.getUint8(offset + 1),
+                view.getUint8(offset + 2),
+                view.getUint8(offset + 3)
+            );
+        }
+        
+        /**
+         * Parses a MIDI file buffer
+         * @param {ArrayBuffer} arrayBuffer - The MIDI file data
+         * @returns {{notes: Array, ticksPerQuarterNote: number, bpm: number}} Parsed MIDI data
+         */
         function parseMIDI(arrayBuffer) {
-            const view = new DataView(arrayBuffer);
-            let offset = 0;
-
-            // Read header chunk
-            const headerChunk = String.fromCharCode(view.getUint8(offset++), view.getUint8(offset++), 
-                                                     view.getUint8(offset++), view.getUint8(offset++));
-            
-            if (headerChunk !== 'MThd') {
-                throw new Error('Invalid MIDI file: Missing MThd header');
+            if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+                throw new Error('Empty or invalid file');
             }
-
-            offset += 4; // Skip header length (always 6)
-            const format = view.getUint16(offset);
-            offset += 2;
-            const numTracks = view.getUint16(offset);
-            offset += 2;
-            const timeDivision = view.getUint16(offset);
-            offset += 2;
-
-            // Calculate ticks per quarter note
-            const ticksPerQuarterNote = timeDivision & 0x7FFF;
-
-            // Read track chunk
-            const trackChunk = String.fromCharCode(view.getUint8(offset++), view.getUint8(offset++), 
-                                                    view.getUint8(offset++), view.getUint8(offset++));
             
-            if (trackChunk !== 'MTrk') {
-                throw new Error('Invalid MIDI file: Missing MTrk header');
-            }
+            try {
+                const view = new DataView(arrayBuffer);
+                let offset = 0;
 
-            const trackLength = view.getUint32(offset);
-            offset += 4;
-            const trackEnd = offset + trackLength;
-
-            // Parse events
-            const notes = [];
-            let currentTempo = 500000; // Default tempo (120 BPM)
-            let runningStatus = 0;
-
-            while (offset < trackEnd && offset < view.byteLength) {
-                // Read delta time
-                let deltaTime = 0;
-                let byte;
-                do {
-                    byte = view.getUint8(offset++);
-                    deltaTime = (deltaTime << 7) | (byte & 0x7F);
-                } while (byte & 0x80);
-
-                // Read event
-                let eventType = view.getUint8(offset);
+                // Read header chunk
+                const headerChunk = readChunkId(view, offset);
+                offset += 4;
                 
-                // Handle running status
-                if (eventType < 0x80) {
-                    eventType = runningStatus;
-                    offset--;
+                if (headerChunk !== MIDI_CONSTANTS.HEADER_CHUNK) {
+                    throw new Error(`Invalid MIDI file: Expected '${MIDI_CONSTANTS.HEADER_CHUNK}' header, got '${headerChunk}'`);
+                }
+
+                const headerLength = view.getUint32(offset);
+                offset += 4;
+                
+                if (headerLength !== MIDI_CONSTANTS.HEADER_LENGTH) {
+                    throw new Error(`Invalid MIDI header length: ${headerLength}`);
                 }
                 
-                offset++;
-                const channel = eventType & 0x0F;
-                const command = eventType & 0xF0;
+                const format = view.getUint16(offset);
+                offset += 2;
+                const numTracks = view.getUint16(offset);
+                offset += 2;
+                const timeDivision = view.getUint16(offset);
+                offset += 2;
 
-                if (command === 0x90 || command === 0x80) { // Note On or Note Off
-                    const note = view.getUint8(offset++);
-                    const velocity = view.getUint8(offset++);
-                    
-                    if (command === 0x90 && velocity > 0) {
-                        notes.push({
-                            deltaTime: deltaTime,
-                            note: note,
-                            velocity: velocity
-                        });
-                    }
-                    
-                    runningStatus = eventType;
-                } else if (command === 0xB0) { // Control Change
-                    offset += 2;
-                    runningStatus = eventType;
-                } else if (command === 0xC0 || command === 0xD0) { // Program Change or Channel Pressure
-                    offset += 1;
-                    runningStatus = eventType;
-                } else if (command === 0xE0) { // Pitch Bend
-                    offset += 2;
-                    runningStatus = eventType;
-                } else if (eventType === 0xFF) { // Meta Event
-                    const metaType = view.getUint8(offset++);
-                    let length = 0;
-                    do {
-                        byte = view.getUint8(offset++);
-                        length = (length << 7) | (byte & 0x7F);
-                    } while (byte & 0x80);
-                    
-                    if (metaType === 0x51 && length === 3) { // Set Tempo
-                        currentTempo = (view.getUint8(offset) << 16) | 
-                                      (view.getUint8(offset + 1) << 8) | 
-                                       view.getUint8(offset + 2);
-                    }
-                    
-                    offset += length;
-                } else if (eventType === 0xF0 || eventType === 0xF7) { // SysEx
-                    let length = 0;
-                    do {
-                        byte = view.getUint8(offset++);
-                        length = (length << 7) | (byte & 0x7F);
-                    } while (byte & 0x80);
-                    offset += length;
+                // Validate time division
+                if (timeDivision & 0x8000) {
+                    throw new Error('SMPTE time division format is not supported');
                 }
+                
+                const ticksPerQuarterNote = timeDivision & 0x7FFF;
+                
+                if (ticksPerQuarterNote === 0) {
+                    throw new Error('Invalid ticks per quarter note: 0');
+                }
+
+                // Read track chunk
+                const trackChunk = readChunkId(view, offset);
+                offset += 4;
+                
+                if (trackChunk !== MIDI_CONSTANTS.TRACK_CHUNK) {
+                    throw new Error(`Invalid MIDI file: Expected '${MIDI_CONSTANTS.TRACK_CHUNK}' track header, got '${trackChunk}'`);
+                }
+
+                const trackLength = view.getUint32(offset);
+                offset += 4;
+                const trackEnd = Math.min(offset + trackLength, view.byteLength);
+
+                // Parse events
+                const notes = [];
+                let currentTempo = MIDI_CONSTANTS.DEFAULT_TEMPO;
+                let runningStatus = 0;
+
+                while (offset < trackEnd) {
+                    try {
+                        // Read delta time
+                        const deltaResult = readVariableLength(view, offset);
+                        const deltaTime = deltaResult.value;
+                        offset += deltaResult.bytesRead;
+
+                        if (offset >= trackEnd) break;
+
+                        // Read event
+                        let eventType = view.getUint8(offset);
+                        
+                        // Handle running status
+                        if (eventType < 0x80) {
+                            if (runningStatus === 0) {
+                                throw new Error('Running status used without previous status');
+                            }
+                            eventType = runningStatus;
+                        } else {
+                            offset++;
+                        }
+                        
+                        const command = eventType & 0xF0;
+
+                        // Handle different MIDI commands
+                        if (command === MIDI_COMMANDS.NOTE_ON || command === MIDI_COMMANDS.NOTE_OFF) {
+                            if (offset + 2 > trackEnd) break;
+                            
+                            const note = view.getUint8(offset++);
+                            const velocity = view.getUint8(offset++);
+                            
+                            if (command === MIDI_COMMANDS.NOTE_ON && velocity > 0) {
+                                notes.push({
+                                    deltaTime,
+                                    note,
+                                    velocity
+                                });
+                            }
+                            
+                            runningStatus = eventType;
+                        } else if (command === MIDI_COMMANDS.CONTROL_CHANGE || command === MIDI_COMMANDS.PITCH_BEND) {
+                            offset += 2;
+                            runningStatus = eventType;
+                        } else if (command === MIDI_COMMANDS.PROGRAM_CHANGE || command === MIDI_COMMANDS.CHANNEL_PRESSURE) {
+                            offset += 1;
+                            runningStatus = eventType;
+                        } else if (eventType === MIDI_COMMANDS.META_EVENT) {
+                            if (offset >= trackEnd) break;
+                            
+                            const metaType = view.getUint8(offset++);
+                            const lengthResult = readVariableLength(view, offset);
+                            const length = lengthResult.value;
+                            offset += lengthResult.bytesRead;
+                            
+                            if (metaType === META_EVENTS.SET_TEMPO && length === 3 && offset + 3 <= trackEnd) {
+                                currentTempo = (view.getUint8(offset) << 16) |
+                                              (view.getUint8(offset + 1) << 8) |
+                                               view.getUint8(offset + 2);
+                            }
+                            
+                            offset += length;
+                        } else if (eventType === MIDI_COMMANDS.SYSEX_START || eventType === MIDI_COMMANDS.SYSEX_END) {
+                            const lengthResult = readVariableLength(view, offset);
+                            offset += lengthResult.bytesRead + lengthResult.value;
+                        } else {
+                            // Unknown event, skip it
+                            console.warn(`Unknown MIDI event: 0x${eventType.toString(16)}`);
+                        }
+                    } catch (eventError) {
+                        console.warn('Error parsing MIDI event:', eventError);
+                        // Try to continue parsing
+                        break;
+                    }
+                }
+
+                // Calculate BPM from tempo
+                const bpm = Math.round(60000000 / currentTempo);
+
+                if (notes.length === 0) {
+                    throw new Error('No notes found in MIDI file. The file may be empty or contain only metadata.');
+                }
+
+                return { notes, ticksPerQuarterNote, bpm };
+            } catch (error) {
+                throw new Error(`MIDI parsing failed: ${error.message}`);
             }
-
-            // Calculate BPM from tempo
-            const bpm = Math.round(60000000 / currentTempo);
-
-            return { notes, ticksPerQuarterNote, bpm };
         }
-
-        // Convert MIDI to GRUB_INIT_TUNE
-        function convertToGrubTune(midiData) {
+        
+        // ============================================================================
+        // GRUB CONVERSION MODULE
+        // ============================================================================
+        
+        /**
+         * Converts parsed MIDI data to GRUB_INIT_TUNE format
+         * @param {Object} midiData - Parsed MIDI data
+         * @param {number} [customTempo] - Optional custom tempo to override detected tempo
+         * @returns {string} GRUB_INIT_TUNE formatted string
+         */
+        function convertToGrubTune(midiData, customTempo = null) {
             const { notes, ticksPerQuarterNote, bpm } = midiData;
             
             if (notes.length === 0) {
@@ -491,6 +636,13 @@
 
         // Copy to clipboard
         copyBtn.addEventListener('click', () => {
+            navigator.clipboard.writeText(currentOutput).then(() => {
+                showStatus('✓ Copied to clipboard!');
+            }).catch(() => {
+                showStatus('Failed to copy to clipboard', true);
+            });
+        });
+
         // Update tempo and regenerate
         updateTempoBtn.addEventListener('click', () => {
             if (!currentMidiData) {
@@ -513,13 +665,6 @@
             output.textContent = grubTune;
             
             showStatus('✓ Tempo updated to ' + newTempo + ' BPM');
-        });
-
-            navigator.clipboard.writeText(currentOutput).then(() => {
-                showStatus('✓ Copied to clipboard!');
-            }).catch(() => {
-                showStatus('Failed to copy to clipboard', true);
-            });
         });
 
         // Download as file
@@ -645,5 +790,3 @@
     </script>
 </body>
 </html>
-
-//TSERDTGSDGFGDSF
