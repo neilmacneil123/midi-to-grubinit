@@ -548,30 +548,46 @@
                 // Convert notes (limit to MAX_GRUB_NOTES for GRUB compatibility)
                 const noteCount = Math.min(notes.length, MIDI_CONSTANTS.MAX_GRUB_NOTES);
                 
+                // Track cumulative time to handle deltaTime properly
+                let cumulativeTime = 0;
+                let lastNoteTime = 0;
+                
                 for (let i = 0; i < noteCount; i++) {
                     const note = notes[i];
                     
                     try {
                         const frequency = midiNoteToFrequency(note.note);
                         
-                        // Calculate duration: convert MIDI ticks to quarter-note beats
-                        // For deltaTime of 0 (simultaneous notes), use a small default
-                        if (note.deltaTime === 0) {
-                            // Skip notes with 0 deltaTime (they would be simultaneous)
-                            // GRUB can't play chords, so we skip these
+                        // Add deltaTime to cumulative time
+                        cumulativeTime += note.deltaTime;
+                        
+                        // Calculate time since last note we actually output
+                        const timeSinceLastNote = cumulativeTime - lastNoteTime;
+                        
+                        // Skip if this note is too close to the previous one (likely a chord)
+                        if (i > 0 && timeSinceLastNote === 0) {
                             continue;
                         }
                         
-                        const durationInBeats = note.deltaTime / ticksPerQuarterNote;
+                        // Calculate duration from ticks
+                        const durationInBeats = timeSinceLastNote / ticksPerQuarterNote;
                         
-                        // Improved scaling for GRUB durations
-                        // Adjust duration scaling based on speed multiplier
-                        let duration = Math.round(durationInBeats * (32 / speedMultiplier));
-                        
-                        // Ensure reasonable bounds: minimum 1, maximum 32
-                        duration = Math.max(1, Math.min(duration, 32));
+                        // For the first note or notes with 0 deltaTime, use a reasonable default
+                        let duration;
+                        if (durationInBeats === 0 || i === 0) {
+                            // Use a short default duration
+                            duration = 2;
+                        } else {
+                            // Improved scaling for GRUB durations
+                            // Adjust duration scaling based on speed multiplier
+                            duration = Math.round(durationInBeats * (32 / speedMultiplier));
+                            
+                            // Ensure reasonable bounds: minimum 1, maximum 32
+                            duration = Math.max(1, Math.min(duration, 32));
+                        }
                         
                         grubTune += ` ${frequency} ${duration}`;
+                        lastNoteTime = cumulativeTime;
                     } catch (noteError) {
                         console.warn(`Skipping note ${i}:`, noteError);
                         // Continue with next note
