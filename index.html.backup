@@ -231,16 +231,6 @@
 
         <div class="status" id="status" role="alert" aria-live="assertive"></div>
 
-        <div id="trackSelection" style="display: none; margin-top: 20px; padding: 20px; background: #f8f9ff; border-radius: 10px; border: 2px solid #667eea;">
-            <h3 style="color: #667eea; margin-bottom: 15px; font-size: 1.1em;">📊 Select Tracks to Convert:</h3>
-            <div id="trackCheckboxes" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; margin-bottom: 15px;"></div>
-            <div style="display: flex; gap: 10px; justify-content: center;">
-                <button class="btn" id="selectAllTracksBtn">☑️ Select All</button>
-                <button class="btn" id="deselectAllTracksBtn">☐ Deselect All</button>
-                <button class="btn" id="convertSelectedBtn" style="background: linear-gradient(135deg, #28a745 0%, #20c997 100%);">✅ Convert Selected Tracks</button>
-            </div>
-        </div>
-
         <div class="output-area" id="outputArea">
             <div class="tempo-control">
                 <label for="tempoInput" class="tempo-label">
@@ -268,8 +258,7 @@
             <h3>How to use:</h3>
             <ul>
                 <li>Upload a MIDI file (.mid or .midi)</li>
-                <li>If the file has multiple tracks, select which ones to convert</li>
-                <li>The converter will combine notes from selected tracks chronologically</li>
+                <li>The converter will extract notes from all tracks</li>
                 <li>Copy the output and add it to your GRUB configuration</li>
                 <li>Add the line to <code>/etc/default/grub</code></li>
                 <li>Run <code>sudo update-grub</code> to apply changes</li>
@@ -329,8 +318,6 @@
         const state = {
             currentOutput: '',
             currentMidiData: null,
-            currentTracks: null,
-            selectedTracks: new Set(),
             audioContext: null,
             isPlaying: false,
             stopPlayback: false,
@@ -455,8 +442,8 @@
 
             const ticksPerQuarterNote = timeDivision & 0x7FFF;
 
-            // Parse all tracks separately
-            const tracks = [];
+            // Parse all tracks to find notes
+            const allNotes = [];
             let currentTempo = MIDI_CONSTANTS.DEFAULT_TEMPO;
 
             for (let trackNum = 0; trackNum < numTracks; trackNum++) {
@@ -560,37 +547,11 @@
                     }
                 }
 
-                // Store track information
-                tracks.push({
-                    trackNumber: trackNum,
-                    notes: trackNotes,
-                    noteCount: trackNotes.length
-                });
+                // Add this track's notes to the collection
+                allNotes.push(...trackNotes);
             }
 
-            // Calculate BPM from tempo
-            const bpm = Math.round(60000000 / currentTempo);
-
-            return { tracks, ticksPerQuarterNote, bpm };
-        }
-
-        /**
-         * Combines selected tracks into a single note array
-         * @param {Array} tracks - Array of track objects
-         * @param {Set} selectedTrackNumbers - Set of track numbers to include
-         * @returns {Array} Combined and sorted notes
-         */
-        function combineSelectedTracks(tracks, selectedTrackNumbers) {
-            const allNotes = [];
-            
-            // Collect notes from selected tracks
-            tracks.forEach(track => {
-                if (selectedTrackNumbers.has(track.trackNumber)) {
-                    allNotes.push(...track.notes);
-                }
-            });
-
-            // Sort all notes by absolute time
+            // Sort all notes by absolute time to get proper chronological order
             allNotes.sort((a, b) => a.absoluteTime - b.absoluteTime);
 
             // Recalculate delta times based on sorted order
@@ -605,7 +566,10 @@
                 };
             });
 
-            return notes;
+            // Calculate BPM from tempo
+            const bpm = Math.round(60000000 / currentTempo);
+
+            return { notes, ticksPerQuarterNote, bpm };
         }
 
         /**
@@ -703,22 +667,22 @@
                     // Update tempo input
                     elements.tempoInput.value = midiData.bpm || CONFIG.DEFAULT_BPM;
                     
-                    // Display track selection if multiple tracks
-                    if (midiData.tracks.length > 1) {
-                        showTrackSelection(midiData.tracks);
-                        showStatus(
-                            `✓ MIDI file loaded with ${midiData.tracks.length} tracks. Select tracks to convert below.`
-                        );
-                    } else {
-                        // Single track - convert automatically
-                        state.selectedTracks = new Set([0]);
-                        convertSelectedTracks();
-                    }
+                    // Generate GRUB tune
+                    const grubTune = convertToGrubTune(midiData);
+                    state.currentOutput = grubTune;
+                    
+                    // Display output
+                    elements.output.textContent = grubTune;
+                    elements.outputArea.style.display = 'block';
+                    
+                    showStatus(
+                        `✓ Conversion successful! Detected tempo: ${midiData.bpm || CONFIG.DEFAULT_BPM} BPM. ` +
+                        `Converted ${Math.min(midiData.notes.length, CONFIG.MAX_GRUB_NOTES)} notes.`
+                    );
                 } catch (error) {
                     showStatus(`Error: ${error.message}`, true);
                     console.error('MIDI parsing error:', error);
                     elements.outputArea.style.display = 'none';
-                    elements.trackSelection.style.display = 'none';
                 }
             };
             
@@ -727,98 +691,6 @@
             };
             
             reader.readAsArrayBuffer(file);
-        }
-
-        /**
-         * Shows track selection UI
-         * @param {Array} tracks - Array of track objects
-         */
-        function showTrackSelection(tracks) {
-            const checkboxContainer = elements.trackCheckboxes;
-            checkboxContainer.innerHTML = '';
-            
-            // Select all tracks by default
-            state.selectedTracks.clear();
-            
-            tracks.forEach(track => {
-                const hasNotes = track.noteCount > 0;
-                if (hasNotes) {
-                    state.selectedTracks.add(track.trackNumber);
-                }
-                
-                const label = document.createElement('label');
-                label.style.cssText = 'display: flex; align-items: center; padding: 10px; background: white; border-radius: 5px; cursor: pointer; border: 2px solid #ddd;';
-                
-                const checkbox = document.createElement('input');
-                checkbox.type = 'checkbox';
-                checkbox.value = track.trackNumber;
-                checkbox.checked = hasNotes;
-                checkbox.disabled = !hasNotes;
-                checkbox.style.marginRight = '10px';
-                checkbox.addEventListener('change', (e) => {
-                    if (e.target.checked) {
-                        state.selectedTracks.add(track.trackNumber);
-                    } else {
-                        state.selectedTracks.delete(track.trackNumber);
-                    }
-                });
-                
-                const text = document.createElement('span');
-                text.textContent = `Track ${track.trackNumber}: ${track.noteCount} notes`;
-                text.style.color = hasNotes ? '#333' : '#999';
-                
-                label.appendChild(checkbox);
-                label.appendChild(text);
-                checkboxContainer.appendChild(label);
-            });
-            
-            elements.trackSelection.style.display = 'block';
-            elements.outputArea.style.display = 'none';
-        }
-
-        /**
-         * Converts selected tracks to GRUB tune
-         */
-        function convertSelectedTracks() {
-            if (!state.currentMidiData) {
-                showStatus('Please upload a MIDI file first', true);
-                return;
-            }
-            
-            if (state.selectedTracks.size === 0) {
-                showStatus('Please select at least one track', true);
-                return;
-            }
-            
-            try {
-                const notes = combineSelectedTracks(state.currentMidiData.tracks, state.selectedTracks);
-                
-                if (notes.length === 0) {
-                    showStatus('No notes found in selected tracks', true);
-                    return;
-                }
-                
-                const midiDataWithNotes = {
-                    notes: notes,
-                    ticksPerQuarterNote: state.currentMidiData.ticksPerQuarterNote,
-                    bpm: state.currentMidiData.bpm
-                };
-                
-                const grubTune = convertToGrubTune(midiDataWithNotes);
-                state.currentOutput = grubTune;
-                
-                elements.output.textContent = grubTune;
-                elements.outputArea.style.display = 'block';
-                
-                const trackList = Array.from(state.selectedTracks).sort((a, b) => a - b).join(', ');
-                showStatus(
-                    `✓ Converted ${state.selectedTracks.size} track(s) [${trackList}] with ` +
-                    `${Math.min(notes.length, CONFIG.MAX_GRUB_NOTES)} notes at ${midiDataWithNotes.bpm} BPM`
-                );
-            } catch (error) {
-                showStatus(`Error: ${error.message}`, true);
-                console.error('Conversion error:', error);
-            }
         }
 
         /**
@@ -1109,11 +981,6 @@
             fileInput: document.getElementById('fileInput'),
             fileInfo: document.getElementById('fileInfo'),
             status: document.getElementById('status'),
-            trackSelection: document.getElementById('trackSelection'),
-            trackCheckboxes: document.getElementById('trackCheckboxes'),
-            selectAllTracksBtn: document.getElementById('selectAllTracksBtn'),
-            deselectAllTracksBtn: document.getElementById('deselectAllTracksBtn'),
-            convertSelectedBtn: document.getElementById('convertSelectedBtn'),
             outputArea: document.getElementById('outputArea'),
             output: document.getElementById('output'),
             copyBtn: document.getElementById('copyBtn'),
@@ -1146,29 +1013,6 @@
             elements.updateTempoBtn.addEventListener('click', updateTempo);
             elements.copyBtn.addEventListener('click', copyToClipboard);
             elements.downloadBtn.addEventListener('click', downloadFile);
-            
-            // Track selection buttons
-            elements.convertSelectedBtn.addEventListener('click', convertSelectedTracks);
-            elements.selectAllTracksBtn.addEventListener('click', () => {
-                if (!state.currentMidiData) return;
-                state.currentMidiData.tracks.forEach(track => {
-                    if (track.noteCount > 0) {
-                        state.selectedTracks.add(track.trackNumber);
-                    }
-                });
-                // Update checkboxes
-                elements.trackCheckboxes.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach(cb => {
-                    cb.checked = true;
-                });
-            });
-            elements.deselectAllTracksBtn.addEventListener('click', () => {
-                state.selectedTracks.clear();
-                // Update checkboxes
-                elements.trackCheckboxes.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-                    cb.checked = false;
-                });
-            });
-            
             elements.playBtn.addEventListener('click', () => {
                 if (state.currentOutput) {
                     playTune(state.currentOutput);
