@@ -607,7 +607,8 @@
             playBtn: document.getElementById('playBtn'),
             stopBtn: document.getElementById('stopBtn'),
             tempoInput: document.getElementById('tempoInput'),
-            updateTempoBtn: document.getElementById('updateTempoBtn')
+            updateTempoBtn: document.getElementById('updateTempoBtn'),
+            speedMultiplier: document.getElementById('speedMultiplier')
         };
 
         // Application state
@@ -696,7 +697,15 @@
                     // Set detected tempo in input field
                     elements.tempoInput.value = midiData.bpm || MIDI_CONSTANTS.DEFAULT_BPM;
                     
-                    const grubTune = convertToGrubTune(midiData);
+                    // Auto-detect if this might be a fast song and suggest speed multiplier
+                    const detectedBPM = midiData.bpm || MIDI_CONSTANTS.DEFAULT_BPM;
+                    if (detectedBPM < 140 && midiData.notes.length > 50) {
+                        // Likely a fast song with low detected BPM - suggest 2x speed
+                        elements.speedMultiplier.value = "2";
+                    }
+                    
+                    const speedMult = parseFloat(elements.speedMultiplier.value);
+                    const grubTune = convertToGrubTune(midiData, null, speedMult);
                     
                     state.currentOutput = grubTune;
                     elements.output.textContent = grubTune;
@@ -816,15 +825,19 @@
             }
             
             try {
-                // Regenerate GRUB tune with new tempo
-                const grubTune = convertToGrubTune(state.currentMidiData, newTempo);
+                // Get speed multiplier
+                const speedMult = parseFloat(elements.speedMultiplier.value);
+                const finalTempo = Math.round(newTempo * speedMult);
+                
+                // Regenerate GRUB tune with new tempo and speed multiplier
+                const grubTune = convertToGrubTune(state.currentMidiData, newTempo, speedMult);
                 state.currentOutput = grubTune;
                 elements.output.textContent = grubTune;
                 
-                showStatus('✓ Tempo updated to ' + newTempo + ' BPM');
+                showStatus(`✓ Settings updated! Base tempo: ${newTempo} BPM, Speed: ${speedMult}x, Final: ${finalTempo} BPM`);
             } catch (error) {
-                showStatus('Error updating tempo: ' + error.message, true);
-                console.error('Tempo update error:', error);
+                showStatus('Error updating settings: ' + error.message, true);
+                console.error('Settings update error:', error);
             }
         });
 
@@ -999,6 +1012,14 @@
                 } else if (value > MIDI_CONSTANTS.MAX_BPM) {
                     e.target.value = MIDI_CONSTANTS.MAX_BPM;
                 }
+            }
+        });
+        
+        // Speed multiplier change handler
+        elements.speedMultiplier.addEventListener('change', () => {
+            if (state.currentMidiData) {
+                // Auto-update when speed multiplier changes
+                elements.updateTempoBtn.click();
             }
         });
         
