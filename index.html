@@ -720,13 +720,12 @@
             
             const grubParts = [`GRUB_INIT_TUNE="${tempo}`];
             
-            // Convert notes (limit to MAX_GRUB_NOTES for GRUB compatibility)
-            const noteCount = Math.min(notes.length, MIDI_CONSTANTS.MAX_GRUB_NOTES);
-            
             let cumulativeTime = 0;
             let lastNoteTime = 0;
+            let addedNotes = 0; // Track actually added notes
             
-            for (let i = 0; i < noteCount; i++) {
+            // Iterate through all notes until we've added MAX_GRUB_NOTES to output
+            for (let i = 0; i < notes.length && addedNotes < MIDI_CONSTANTS.MAX_GRUB_NOTES; i++) {
                 const note = notes[i];
                 
                 try {
@@ -754,6 +753,7 @@
                     
                     grubParts.push(` ${frequency} ${duration}`);
                     lastNoteTime = cumulativeTime;
+                    addedNotes++;
                 } catch (noteError) {
                     console.warn(`Skipping note ${i}:`, noteError);
                 }
@@ -761,9 +761,9 @@
             
             grubParts.push('"');
             
-            if (notes.length > MIDI_CONSTANTS.MAX_GRUB_NOTES) {
+            if (addedNotes >= MIDI_CONSTANTS.MAX_GRUB_NOTES) {
                 console.warn(
-                    `MIDI file contains ${notes.length} notes. Only the first ${MIDI_CONSTANTS.MAX_GRUB_NOTES} were converted.`
+                    `Output limited to ${MIDI_CONSTANTS.MAX_GRUB_NOTES} notes for GRUB compatibility (MIDI had ${notes.length} notes).`
                 );
             }
             
