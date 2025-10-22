@@ -45,6 +45,11 @@
             font-size: 0.9em;
         }
 
+        .version {
+            color: #999;
+            font-size: 0.75em;
+        }
+
         .upload-area {
             border: 3px dashed #667eea;
             border-radius: 15px;
@@ -56,7 +61,7 @@
             background: #f8f9ff;
         }
 
-        .upload-area:hover {
+        .upload-area:hover:not(.loading) {
             border-color: #764ba2;
             background: #f0f2ff;
         }
@@ -64,6 +69,12 @@
         .upload-area.drag-over {
             background: #e8ebff;
             border-color: #764ba2;
+        }
+
+        .upload-area.loading {
+            opacity: 0.6;
+            pointer-events: none;
+            cursor: not-allowed;
         }
 
         .upload-icon {
@@ -74,6 +85,11 @@
         .upload-text {
             color: #666;
             margin-bottom: 10px;
+        }
+
+        .file-format-hint {
+            color: #999;
+            font-size: 0.8em;
         }
 
         input[type="file"] {
@@ -88,22 +104,62 @@
             border-radius: 25px;
             cursor: pointer;
             font-size: 1em;
-            transition: transform 0.2s ease;
+            transition: transform 0.2s ease, opacity 0.2s ease;
             margin: 5px;
         }
 
-        .btn:hover {
+        .btn:hover:not(:disabled) {
             transform: translateY(-2px);
         }
 
         .btn:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+            transform: none;
         }
 
         .output-area {
             margin-top: 30px;
             display: none;
+        }
+
+        .controls-group {
+            margin-bottom: 20px;
+        }
+
+        .controls-row {
+            display: flex;
+            gap: 15px;
+            align-items: flex-start;
+            flex-wrap: wrap;
+        }
+
+        .control-item {
+            flex: 0 1 auto;
+        }
+
+        .control-label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #333;
+        }
+
+        .control-input {
+            padding: 8px;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            font-size: 1em;
+        }
+
+        .tempo-input {
+            width: 100px;
+        }
+
+        .control-hint {
+            margin-top: 5px;
+            font-size: 0.85em;
+            color: #666;
         }
 
         .output-label {
@@ -180,43 +236,66 @@
             margin-top: 10px;
             font-size: 0.9em;
         }
+
+        /* Responsive design */
+        @media (max-width: 600px) {
+            .container {
+                padding: 20px;
+            }
+
+            .controls-row {
+                flex-direction: column;
+            }
+
+            .control-item {
+                width: 100%;
+            }
+
+            .tempo-input {
+                width: 100%;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🎵 MIDI to GRUB_INIT_TUNE</h1>
-        <p class="subtitle">Convert your MIDI files to GRUB bootloader tunes <span style="color: #999; font-size: 0.75em;">(v2.1.0)</span></p>
+        <p class="subtitle">
+            Convert your MIDI files to GRUB bootloader tunes 
+            <span class="version">(v2.2.0)</span>
+        </p>
 
         <div class="upload-area" id="uploadArea" role="button" tabindex="0" aria-label="Upload MIDI file">
             <div class="upload-icon" aria-hidden="true">📁</div>
             <div class="upload-text">
                 <strong>Click to upload</strong> or drag and drop your MIDI file here
             </div>
-            <div style="color: #999; font-size: 0.8em;">Supports .mid and .midi files</div>
+            <div class="file-format-hint">Supports .mid and .midi files</div>
         </div>
 
         <input type="file" id="fileInput" accept=".mid,.midi" aria-label="Select MIDI file">
         
-        <div class="file-info" id="fileInfo"></div>
+        <div class="file-info" id="fileInfo" role="status" aria-live="polite"></div>
 
-        <div class="status" id="status"></div>
+        <div class="status" id="status" role="alert"></div>
 
         <div class="output-area" id="outputArea" role="region" aria-live="polite">
-            <div style="margin-bottom: 20px;">
-                <div style="display: flex; gap: 15px; align-items: flex-start; flex-wrap: wrap;">
-                    <div>
-                        <label for="tempoInput" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">
-                            Tempo (BPM):
-                        </label>
-                        <input type="number" id="tempoInput" min="20" max="800" value="120"
-                               style="padding: 8px; border: 2px solid #667eea; border-radius: 5px; font-size: 1em; width: 100px;"
-                               aria-describedby="tempoHelp">
+            <div class="controls-group">
+                <div class="controls-row">
+                    <div class="control-item">
+                        <label for="tempoInput" class="control-label">Tempo (BPM):</label>
+                        <input 
+                            type="number" 
+                            id="tempoInput" 
+                            class="control-input tempo-input"
+                            min="20" 
+                            max="800" 
+                            value="120"
+                            aria-describedby="tempoHelp">
                     </div>
-                    <div>
-                        <label for="speedMultiplier" style="display: block; margin-bottom: 5px; font-weight: bold; color: #333;">
-                            Speed Multiplier:
-                        </label>
-                        <select id="speedMultiplier" style="padding: 8px; border: 2px solid #667eea; border-radius: 5px; font-size: 1em;">
+                    <div class="control-item">
+                        <label for="speedMultiplier" class="control-label">Speed Multiplier:</label>
+                        <select id="speedMultiplier" class="control-input">
                             <option value="1">1x (Normal)</option>
                             <option value="1.5">1.5x (Faster)</option>
                             <option value="2">2x (Double)</option>
@@ -226,11 +305,12 @@
                         </select>
                     </div>
                 </div>
-                <button class="btn" id="updateTempoBtn" style="margin-top: 10px;">🔄 Update Settings</button>
-                <div id="tempoHelp" style="margin-top: 5px; font-size: 0.85em; color: #666;">
+                <button class="btn" id="updateTempoBtn">🔄 Update Settings</button>
+                <div id="tempoHelp" class="control-hint">
                     Fast songs like metal/rock often need 2-3x speed multiplier. Max tempo: 800 BPM.
                 </div>
             </div>
+
             <label class="output-label" for="output">GRUB_INIT_TUNE Output:</label>
             <div class="output-box" id="output" role="textbox" aria-readonly="true"></div>
             
@@ -261,7 +341,7 @@
         // CONSTANTS
         // ============================================================================
         
-        const MIDI_CONSTANTS = {
+        const MIDI_CONSTANTS = Object.freeze({
             HEADER_CHUNK: 'MThd',
             TRACK_CHUNK: 'MTrk',
             HEADER_LENGTH: 6,
@@ -271,10 +351,14 @@
             MAX_GRUB_NOTES: 100,
             MIN_BPM: 20,
             MAX_BPM: 800,
-            DEFAULT_BPM: 120
-        };
+            DEFAULT_BPM: 120,
+            MAX_FILE_SIZE: 10 * 1024 * 1024, // 10MB
+            MIN_MIDI_NOTE: 0,
+            MAX_MIDI_NOTE: 127,
+            MAX_VLQ_BYTES: 4
+        });
         
-        const MIDI_COMMANDS = {
+        const MIDI_COMMANDS = Object.freeze({
             NOTE_OFF: 0x80,
             NOTE_ON: 0x90,
             CONTROL_CHANGE: 0xB0,
@@ -284,14 +368,83 @@
             META_EVENT: 0xFF,
             SYSEX_START: 0xF0,
             SYSEX_END: 0xF7
-        };
+        });
         
-        const META_EVENTS = {
+        const META_EVENTS = Object.freeze({
             SET_TEMPO: 0x51
-        };
+        });
         
-        const STATUS_TIMEOUT = 5000; // milliseconds
-        const AUDIO_GAIN = 0.125; // Volume level for playback
+        const UI_CONSTANTS = Object.freeze({
+            STATUS_TIMEOUT: 5000, // milliseconds
+            AUDIO_GAIN: 0.125, // Volume level for playback
+            DOWNLOAD_CLEANUP_DELAY: 100, // milliseconds
+            LOADING_CLASS: 'loading',
+            DRAG_OVER_CLASS: 'drag-over',
+            AUTO_SPEED_DETECT_THRESHOLD_BPM: 140,
+            AUTO_SPEED_DETECT_MIN_NOTES: 50
+        });
+        
+        // Cached regex patterns for performance
+        const REGEX_PATTERNS = Object.freeze({
+            MIDI_FILE: /\.(mid|midi)$/i,
+            GRUB_TUNE: /GRUB_INIT_TUNE="(\d+)((?:\s+\d+\s+\d+)+)"/,
+            WHITESPACE: /\s+/
+        });
+        
+        // ============================================================================
+        // UTILITY FUNCTIONS
+        // ============================================================================
+        
+        /**
+         * Clamps a number between min and max values
+         * @param {number} value - The value to clamp
+         * @param {number} min - Minimum value
+         * @param {number} max - Maximum value
+         * @returns {number} Clamped value
+         */
+        function clamp(value, min, max) {
+            return Math.min(Math.max(value, min), max);
+        }
+        
+        /**
+         * Debounces a function call
+         * @param {Function} func - Function to debounce
+         * @param {number} wait - Milliseconds to wait
+         * @returns {Function} Debounced function
+         */
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        /**
+         * Safely parses an integer with validation
+         * @param {string} value - String to parse
+         * @param {number} defaultValue - Default value if parsing fails
+         * @returns {number} Parsed integer or default
+         */
+        function safeParseInt(value, defaultValue = 0) {
+            const parsed = parseInt(value, 10);
+            return isNaN(parsed) ? defaultValue : parsed;
+        }
+        
+        /**
+         * Safely parses a float with validation
+         * @param {string} value - String to parse
+         * @param {number} defaultValue - Default value if parsing fails
+         * @returns {number} Parsed float or default
+         */
+        function safeParseFloat(value, defaultValue = 0) {
+            const parsed = parseFloat(value);
+            return isNaN(parsed) ? defaultValue : parsed;
+        }
         
         // ============================================================================
         // MIDI PARSING MODULE
@@ -301,10 +454,13 @@
          * Converts a MIDI note number to frequency in Hz
          * @param {number} note - MIDI note number (0-127)
          * @returns {number} Frequency in Hz
+         * @throws {Error} If note is out of valid range
          */
         function midiNoteToFrequency(note) {
-            if (note < 0 || note > 127) {
-                throw new Error(`Invalid MIDI note: ${note}. Must be between 0 and 127.`);
+            if (note < MIDI_CONSTANTS.MIN_MIDI_NOTE || note > MIDI_CONSTANTS.MAX_MIDI_NOTE) {
+                throw new Error(
+                    `Invalid MIDI note: ${note}. Must be between ${MIDI_CONSTANTS.MIN_MIDI_NOTE} and ${MIDI_CONSTANTS.MAX_MIDI_NOTE}.`
+                );
             }
             return Math.round(
                 MIDI_CONSTANTS.A4_FREQUENCY *
@@ -317,6 +473,7 @@
          * @param {DataView} view - DataView of MIDI data
          * @param {number} offset - Current offset in the data
          * @returns {{value: number, bytesRead: number}} The value and number of bytes read
+         * @throws {Error} If data is malformed or EOF is reached
          */
         function readVariableLength(view, offset) {
             let value = 0;
@@ -332,8 +489,8 @@
                 bytesRead++;
                 
                 // Prevent infinite loops with malformed data
-                if (bytesRead > 4) {
-                    throw new Error('Invalid variable length quantity');
+                if (bytesRead > MIDI_CONSTANTS.MAX_VLQ_BYTES) {
+                    throw new Error('Invalid variable length quantity: exceeded maximum bytes');
                 }
             } while (byte & 0x80);
             
@@ -345,6 +502,7 @@
          * @param {DataView} view - DataView of MIDI data
          * @param {number} offset - Current offset in the data
          * @returns {string} Four-character chunk identifier
+         * @throws {Error} If EOF is reached
          */
         function readChunkId(view, offset) {
             if (offset + 4 > view.byteLength) {
@@ -359,155 +517,171 @@
         }
         
         /**
+         * Parses MIDI events from track data
+         * @param {DataView} view - DataView of MIDI data
+         * @param {number} startOffset - Starting offset in track
+         * @param {number} trackEnd - End offset of track
+         * @returns {{notes: Array, tempo: number}} Parsed notes and tempo
+         */
+        function parseMIDIEvents(view, startOffset, trackEnd) {
+            const notes = [];
+            let offset = startOffset;
+            let currentTempo = MIDI_CONSTANTS.DEFAULT_TEMPO;
+            let runningStatus = 0;
+
+            while (offset < trackEnd) {
+                try {
+                    // Read delta time
+                    const deltaResult = readVariableLength(view, offset);
+                    const deltaTime = deltaResult.value;
+                    offset += deltaResult.bytesRead;
+
+                    if (offset >= trackEnd) break;
+
+                    // Read event type
+                    let eventType = view.getUint8(offset);
+                    
+                    // Handle running status
+                    if (eventType < 0x80) {
+                        if (runningStatus === 0) {
+                            throw new Error('Running status used without previous status');
+                        }
+                        eventType = runningStatus;
+                    } else {
+                        offset++;
+                    }
+                    
+                    const command = eventType & 0xF0;
+
+                    // Process different MIDI commands
+                    if (command === MIDI_COMMANDS.NOTE_ON || command === MIDI_COMMANDS.NOTE_OFF) {
+                        if (offset + 2 > trackEnd) break;
+                        
+                        const note = view.getUint8(offset++);
+                        const velocity = view.getUint8(offset++);
+                        
+                        // Only register NOTE_ON events with velocity > 0
+                        if (command === MIDI_COMMANDS.NOTE_ON && velocity > 0) {
+                            notes.push({ deltaTime, note, velocity });
+                        }
+                        
+                        runningStatus = eventType;
+                    } else if (command === MIDI_COMMANDS.CONTROL_CHANGE || command === MIDI_COMMANDS.PITCH_BEND) {
+                        if (offset + 2 > trackEnd) break;
+                        offset += 2;
+                        runningStatus = eventType;
+                    } else if (command === MIDI_COMMANDS.PROGRAM_CHANGE || command === MIDI_COMMANDS.CHANNEL_PRESSURE) {
+                        if (offset + 1 > trackEnd) break;
+                        offset += 1;
+                        runningStatus = eventType;
+                    } else if (eventType === MIDI_COMMANDS.META_EVENT) {
+                        if (offset >= trackEnd) break;
+                        
+                        const metaType = view.getUint8(offset++);
+                        const lengthResult = readVariableLength(view, offset);
+                        const length = lengthResult.value;
+                        offset += lengthResult.bytesRead;
+                        
+                        // Parse tempo change events
+                        if (metaType === META_EVENTS.SET_TEMPO && length === 3 && offset + 3 <= trackEnd) {
+                            currentTempo = (view.getUint8(offset) << 16) |
+                                          (view.getUint8(offset + 1) << 8) |
+                                           view.getUint8(offset + 2);
+                        }
+                        
+                        offset += length;
+                    } else if (eventType === MIDI_COMMANDS.SYSEX_START || eventType === MIDI_COMMANDS.SYSEX_END) {
+                        const lengthResult = readVariableLength(view, offset);
+                        offset += lengthResult.bytesRead + lengthResult.value;
+                    } else {
+                        // Unknown event - log and skip
+                        console.warn(`Unknown MIDI event: 0x${eventType.toString(16)} at offset ${offset}`);
+                        break;
+                    }
+                } catch (eventError) {
+                    console.warn('Error parsing MIDI event:', eventError);
+                    break;
+                }
+            }
+
+            return { notes, tempo: currentTempo };
+        }
+        
+        /**
          * Parses a MIDI file buffer
          * @param {ArrayBuffer} arrayBuffer - The MIDI file data
          * @returns {{notes: Array, ticksPerQuarterNote: number, bpm: number}} Parsed MIDI data
+         * @throws {Error} If MIDI file is invalid or parsing fails
          */
         function parseMIDI(arrayBuffer) {
             if (!arrayBuffer || arrayBuffer.byteLength === 0) {
                 throw new Error('Empty or invalid file');
             }
             
-            try {
-                const view = new DataView(arrayBuffer);
-                let offset = 0;
+            const view = new DataView(arrayBuffer);
+            let offset = 0;
 
-                // Read header chunk
-                const headerChunk = readChunkId(view, offset);
-                offset += 4;
-                
-                if (headerChunk !== MIDI_CONSTANTS.HEADER_CHUNK) {
-                    throw new Error(`Invalid MIDI file: Expected '${MIDI_CONSTANTS.HEADER_CHUNK}' header, got '${headerChunk}'`);
-                }
-
-                const headerLength = view.getUint32(offset);
-                offset += 4;
-                
-                if (headerLength !== MIDI_CONSTANTS.HEADER_LENGTH) {
-                    throw new Error(`Invalid MIDI header length: ${headerLength}`);
-                }
-                
-                const format = view.getUint16(offset);
-                offset += 2;
-                const numTracks = view.getUint16(offset);
-                offset += 2;
-                const timeDivision = view.getUint16(offset);
-                offset += 2;
-
-                // Validate time division
-                if (timeDivision & 0x8000) {
-                    throw new Error('SMPTE time division format is not supported');
-                }
-                
-                const ticksPerQuarterNote = timeDivision & 0x7FFF;
-                
-                if (ticksPerQuarterNote === 0) {
-                    throw new Error('Invalid ticks per quarter note: 0');
-                }
-
-                // Read track chunk
-                const trackChunk = readChunkId(view, offset);
-                offset += 4;
-                
-                if (trackChunk !== MIDI_CONSTANTS.TRACK_CHUNK) {
-                    throw new Error(`Invalid MIDI file: Expected '${MIDI_CONSTANTS.TRACK_CHUNK}' track header, got '${trackChunk}'`);
-                }
-
-                const trackLength = view.getUint32(offset);
-                offset += 4;
-                const trackEnd = Math.min(offset + trackLength, view.byteLength);
-
-                // Parse events
-                const notes = [];
-                let currentTempo = MIDI_CONSTANTS.DEFAULT_TEMPO;
-                let runningStatus = 0;
-
-                while (offset < trackEnd) {
-                    try {
-                        // Read delta time
-                        const deltaResult = readVariableLength(view, offset);
-                        const deltaTime = deltaResult.value;
-                        offset += deltaResult.bytesRead;
-
-                        if (offset >= trackEnd) break;
-
-                        // Read event
-                        let eventType = view.getUint8(offset);
-                        
-                        // Handle running status
-                        if (eventType < 0x80) {
-                            if (runningStatus === 0) {
-                                throw new Error('Running status used without previous status');
-                            }
-                            eventType = runningStatus;
-                        } else {
-                            offset++;
-                        }
-                        
-                        const command = eventType & 0xF0;
-
-                        // Handle different MIDI commands
-                        if (command === MIDI_COMMANDS.NOTE_ON || command === MIDI_COMMANDS.NOTE_OFF) {
-                            if (offset + 2 > trackEnd) break;
-                            
-                            const note = view.getUint8(offset++);
-                            const velocity = view.getUint8(offset++);
-                            
-                            if (command === MIDI_COMMANDS.NOTE_ON && velocity > 0) {
-                                notes.push({
-                                    deltaTime,
-                                    note,
-                                    velocity
-                                });
-                            }
-                            
-                            runningStatus = eventType;
-                        } else if (command === MIDI_COMMANDS.CONTROL_CHANGE || command === MIDI_COMMANDS.PITCH_BEND) {
-                            offset += 2;
-                            runningStatus = eventType;
-                        } else if (command === MIDI_COMMANDS.PROGRAM_CHANGE || command === MIDI_COMMANDS.CHANNEL_PRESSURE) {
-                            offset += 1;
-                            runningStatus = eventType;
-                        } else if (eventType === MIDI_COMMANDS.META_EVENT) {
-                            if (offset >= trackEnd) break;
-                            
-                            const metaType = view.getUint8(offset++);
-                            const lengthResult = readVariableLength(view, offset);
-                            const length = lengthResult.value;
-                            offset += lengthResult.bytesRead;
-                            
-                            if (metaType === META_EVENTS.SET_TEMPO && length === 3 && offset + 3 <= trackEnd) {
-                                currentTempo = (view.getUint8(offset) << 16) |
-                                              (view.getUint8(offset + 1) << 8) |
-                                               view.getUint8(offset + 2);
-                            }
-                            
-                            offset += length;
-                        } else if (eventType === MIDI_COMMANDS.SYSEX_START || eventType === MIDI_COMMANDS.SYSEX_END) {
-                            const lengthResult = readVariableLength(view, offset);
-                            offset += lengthResult.bytesRead + lengthResult.value;
-                        } else {
-                            // Unknown event, skip it
-                            console.warn(`Unknown MIDI event: 0x${eventType.toString(16)}`);
-                        }
-                    } catch (eventError) {
-                        console.warn('Error parsing MIDI event:', eventError);
-                        // Try to continue parsing
-                        break;
-                    }
-                }
-
-                // Calculate BPM from tempo
-                const bpm = Math.round(60000000 / currentTempo);
-
-                if (notes.length === 0) {
-                    throw new Error('No notes found in MIDI file. The file may be empty or contain only metadata.');
-                }
-
-                return { notes, ticksPerQuarterNote, bpm };
-            } catch (error) {
-                throw new Error(`MIDI parsing failed: ${error.message}`);
+            // Parse header chunk
+            const headerChunk = readChunkId(view, offset);
+            offset += 4;
+            
+            if (headerChunk !== MIDI_CONSTANTS.HEADER_CHUNK) {
+                throw new Error(
+                    `Invalid MIDI file: Expected '${MIDI_CONSTANTS.HEADER_CHUNK}' header, got '${headerChunk}'`
+                );
             }
+
+            const headerLength = view.getUint32(offset);
+            offset += 4;
+            
+            if (headerLength !== MIDI_CONSTANTS.HEADER_LENGTH) {
+                throw new Error(`Invalid MIDI header length: ${headerLength}`);
+            }
+            
+            // Read format, tracks, and time division
+            const format = view.getUint16(offset);
+            offset += 2;
+            const numTracks = view.getUint16(offset);
+            offset += 2;
+            const timeDivision = view.getUint16(offset);
+            offset += 2;
+
+            // Validate time division (must be ticks per quarter note, not SMPTE)
+            if (timeDivision & 0x8000) {
+                throw new Error('SMPTE time division format is not supported');
+            }
+            
+            const ticksPerQuarterNote = timeDivision & 0x7FFF;
+            
+            if (ticksPerQuarterNote === 0) {
+                throw new Error('Invalid ticks per quarter note: 0');
+            }
+
+            // Parse first track chunk
+            const trackChunk = readChunkId(view, offset);
+            offset += 4;
+            
+            if (trackChunk !== MIDI_CONSTANTS.TRACK_CHUNK) {
+                throw new Error(
+                    `Invalid MIDI file: Expected '${MIDI_CONSTANTS.TRACK_CHUNK}' track header, got '${trackChunk}'`
+                );
+            }
+
+            const trackLength = view.getUint32(offset);
+            offset += 4;
+            const trackEnd = Math.min(offset + trackLength, view.byteLength);
+
+            // Parse events from track
+            const { notes, tempo } = parseMIDIEvents(view, offset, trackEnd);
+
+            // Calculate BPM from tempo
+            const bpm = Math.round(60000000 / tempo);
+
+            if (notes.length === 0) {
+                throw new Error('No notes found in MIDI file. The file may be empty or contain only metadata.');
+            }
+
+            return { notes, ticksPerQuarterNote, bpm };
         }
         
         // ============================================================================
@@ -518,135 +692,198 @@
          * Converts parsed MIDI data to GRUB_INIT_TUNE format
          * @param {Object} midiData - Parsed MIDI data
          * @param {number} [customTempo] - Optional custom tempo to override detected tempo
+         * @param {number} [speedMultiplier=1] - Speed multiplier for tempo
          * @returns {string} GRUB_INIT_TUNE formatted string
+         * @throws {Error} If conversion fails
          */
         function convertToGrubTune(midiData, customTempo = null, speedMultiplier = 1) {
-            try {
-                const { notes, ticksPerQuarterNote, bpm } = midiData;
-                
-                if (!notes || notes.length === 0) {
-                    throw new Error('No notes available for conversion');
-                }
-                
-                if (!ticksPerQuarterNote || ticksPerQuarterNote <= 0) {
-                    throw new Error('Invalid ticks per quarter note');
-                }
-
-                // Use custom tempo if provided, otherwise use detected tempo, or default
-                let baseTempo = customTempo || bpm || MIDI_CONSTANTS.DEFAULT_BPM;
-                
-                // Apply speed multiplier
-                const tempo = Math.round(baseTempo * speedMultiplier);
-                
-                // Validate tempo
-                if (tempo < MIDI_CONSTANTS.MIN_BPM || tempo > MIDI_CONSTANTS.MAX_BPM) {
-                    throw new Error(`Final tempo must be between ${MIDI_CONSTANTS.MIN_BPM} and ${MIDI_CONSTANTS.MAX_BPM} BPM`);
-                }
-                
-                let grubTune = `GRUB_INIT_TUNE="${tempo}`;
-                
-                // Convert notes (limit to MAX_GRUB_NOTES for GRUB compatibility)
-                const noteCount = Math.min(notes.length, MIDI_CONSTANTS.MAX_GRUB_NOTES);
-                
-                // Track cumulative time to handle deltaTime properly
-                let cumulativeTime = 0;
-                let lastNoteTime = 0;
-                
-                for (let i = 0; i < noteCount; i++) {
-                    const note = notes[i];
-                    
-                    try {
-                        const frequency = midiNoteToFrequency(note.note);
-                        
-                        // Add deltaTime to cumulative time
-                        cumulativeTime += note.deltaTime;
-                        
-                        // Calculate time since last note we actually output
-                        const timeSinceLastNote = cumulativeTime - lastNoteTime;
-                        
-                        // Skip if this note is too close to the previous one (likely a chord)
-                        if (i > 0 && timeSinceLastNote === 0) {
-                            continue;
-                        }
-                        
-                        // Calculate duration from ticks
-                        const durationInBeats = timeSinceLastNote / ticksPerQuarterNote;
-                        
-                        // For the first note or notes with 0 deltaTime, use a reasonable default
-                        let duration;
-                        if (durationInBeats === 0 || i === 0) {
-                            // Use a short default duration
-                            duration = 2;
-                        } else {
-                            // Improved scaling for GRUB durations
-                            // Adjust duration scaling based on speed multiplier
-                            duration = Math.round(durationInBeats * (32 / speedMultiplier));
-                            
-                            // Ensure reasonable bounds: minimum 1, maximum 32
-                            duration = Math.max(1, Math.min(duration, 32));
-                        }
-                        
-                        grubTune += ` ${frequency} ${duration}`;
-                        lastNoteTime = cumulativeTime;
-                    } catch (noteError) {
-                        console.warn(`Skipping note ${i}:`, noteError);
-                        // Continue with next note
-                    }
-                }
-                
-                grubTune += '"';
-                
-                if (notes.length > MIDI_CONSTANTS.MAX_GRUB_NOTES) {
-                    console.warn(`MIDI file contains ${notes.length} notes. Only the first ${MIDI_CONSTANTS.MAX_GRUB_NOTES} were converted.`);
-                }
-                
-                return grubTune;
-            } catch (error) {
-                throw new Error(`GRUB conversion failed: ${error.message}`);
+            const { notes, ticksPerQuarterNote, bpm } = midiData;
+            
+            if (!notes || notes.length === 0) {
+                throw new Error('No notes available for conversion');
             }
+            
+            if (!ticksPerQuarterNote || ticksPerQuarterNote <= 0) {
+                throw new Error('Invalid ticks per quarter note');
+            }
+
+            // Calculate final tempo
+            const baseTempo = customTempo || bpm || MIDI_CONSTANTS.DEFAULT_BPM;
+            const tempo = Math.round(baseTempo * speedMultiplier);
+            
+            // Validate tempo range
+            if (tempo < MIDI_CONSTANTS.MIN_BPM || tempo > MIDI_CONSTANTS.MAX_BPM) {
+                throw new Error(
+                    `Final tempo must be between ${MIDI_CONSTANTS.MIN_BPM} and ${MIDI_CONSTANTS.MAX_BPM} BPM`
+                );
+            }
+            
+            const grubParts = [`GRUB_INIT_TUNE="${tempo}`];
+            
+            // Convert notes (limit to MAX_GRUB_NOTES for GRUB compatibility)
+            const noteCount = Math.min(notes.length, MIDI_CONSTANTS.MAX_GRUB_NOTES);
+            
+            let cumulativeTime = 0;
+            let lastNoteTime = 0;
+            
+            for (let i = 0; i < noteCount; i++) {
+                const note = notes[i];
+                
+                try {
+                    const frequency = midiNoteToFrequency(note.note);
+                    
+                    cumulativeTime += note.deltaTime;
+                    const timeSinceLastNote = cumulativeTime - lastNoteTime;
+                    
+                    // Skip notes that are too close (likely chords)
+                    if (i > 0 && timeSinceLastNote === 0) {
+                        continue;
+                    }
+                    
+                    // Calculate duration
+                    const durationInBeats = timeSinceLastNote / ticksPerQuarterNote;
+                    
+                    let duration;
+                    if (durationInBeats === 0 || i === 0) {
+                        duration = 2; // Default short duration
+                    } else {
+                        // Scale duration based on speed multiplier
+                        duration = Math.round(durationInBeats * (32 / speedMultiplier));
+                        duration = clamp(duration, 1, 32);
+                    }
+                    
+                    grubParts.push(` ${frequency} ${duration}`);
+                    lastNoteTime = cumulativeTime;
+                } catch (noteError) {
+                    console.warn(`Skipping note ${i}:`, noteError);
+                }
+            }
+            
+            grubParts.push('"');
+            
+            if (notes.length > MIDI_CONSTANTS.MAX_GRUB_NOTES) {
+                console.warn(
+                    `MIDI file contains ${notes.length} notes. Only the first ${MIDI_CONSTANTS.MAX_GRUB_NOTES} were converted.`
+                );
+            }
+            
+            return grubParts.join('');
         }
 
         // ============================================================================
         // UI MODULE
         // ============================================================================
         
-        // Cache DOM elements
-        const elements = {
-            uploadArea: document.getElementById('uploadArea'),
-            fileInput: document.getElementById('fileInput'),
-            fileInfo: document.getElementById('fileInfo'),
-            status: document.getElementById('status'),
-            outputArea: document.getElementById('outputArea'),
-            output: document.getElementById('output'),
-            copyBtn: document.getElementById('copyBtn'),
-            downloadBtn: document.getElementById('downloadBtn'),
-            playBtn: document.getElementById('playBtn'),
-            stopBtn: document.getElementById('stopBtn'),
-            tempoInput: document.getElementById('tempoInput'),
-            updateTempoBtn: document.getElementById('updateTempoBtn'),
-            speedMultiplier: document.getElementById('speedMultiplier')
-        };
+        /**
+         * DOM element cache and management
+         */
+        class UIElements {
+            constructor() {
+                this.uploadArea = document.getElementById('uploadArea');
+                this.fileInput = document.getElementById('fileInput');
+                this.fileInfo = document.getElementById('fileInfo');
+                this.status = document.getElementById('status');
+                this.outputArea = document.getElementById('outputArea');
+                this.output = document.getElementById('output');
+                this.copyBtn = document.getElementById('copyBtn');
+                this.downloadBtn = document.getElementById('downloadBtn');
+                this.playBtn = document.getElementById('playBtn');
+                this.stopBtn = document.getElementById('stopBtn');
+                this.tempoInput = document.getElementById('tempoInput');
+                this.updateTempoBtn = document.getElementById('updateTempoBtn');
+                this.speedMultiplier = document.getElementById('speedMultiplier');
+                
+                this.validate();
+            }
+            
+            validate() {
+                const requiredElements = Object.keys(this);
+                for (const key of requiredElements) {
+                    if (!this[key]) {
+                        throw new Error(`Required UI element '${key}' not found`);
+                    }
+                }
+            }
+            
+            setLoadingState(isLoading) {
+                if (isLoading) {
+                    this.uploadArea.classList.add(UI_CONSTANTS.LOADING_CLASS);
+                } else {
+                    this.uploadArea.classList.remove(UI_CONSTANTS.LOADING_CLASS);
+                }
+            }
+        }
 
-        // Application state
-        const state = {
-            currentOutput: '',
-            currentMidiData: null,
-            audioContext: null,
-            isPlaying: false,
-            stopPlayback: false,
-            statusTimeoutId: null
-        };
+        /**
+         * Application state management
+         */
+        class AppState {
+            constructor() {
+                this.currentOutput = '';
+                this.currentMidiData = null;
+                this.audioContext = null;
+                this.isPlaying = false;
+                this.stopPlayback = false;
+                this.statusTimeoutId = null;
+                this.playbackTimeoutId = null;
+                this.activeOscillators = [];
+            }
+            
+            reset() {
+                this.currentOutput = '';
+                this.currentMidiData = null;
+                this.isPlaying = false;
+                this.stopPlayback = false;
+                this.clearTimeouts();
+                this.stopAllOscillators();
+            }
+            
+            clearTimeouts() {
+                if (this.statusTimeoutId) {
+                    clearTimeout(this.statusTimeoutId);
+                    this.statusTimeoutId = null;
+                }
+                if (this.playbackTimeoutId) {
+                    clearTimeout(this.playbackTimeoutId);
+                    this.playbackTimeoutId = null;
+                }
+            }
+            
+            stopAllOscillators() {
+                for (const oscillator of this.activeOscillators) {
+                    try {
+                        oscillator.stop();
+                        oscillator.disconnect();
+                    } catch (e) {
+                        // Ignore errors from already stopped oscillators
+                    }
+                }
+                this.activeOscillators = [];
+            }
+            
+            cleanup() {
+                this.clearTimeouts();
+                this.stopAllOscillators();
+                if (this.audioContext && this.audioContext.state !== 'closed') {
+                    this.audioContext.close().catch(err => {
+                        console.error('Error closing audio context:', err);
+                    });
+                    this.audioContext = null;
+                }
+            }
+        }
+
+        // Initialize UI elements and state
+        const elements = new UIElements();
+        const state = new AppState();
 
         /**
          * Shows a status message to the user
          * @param {string} message - The message to display
-         * @param {boolean} isError - Whether this is an error message
+         * @param {boolean} [isError=false] - Whether this is an error message
          */
         function showStatus(message, isError = false) {
-            // Clear any existing timeout
-            if (state.statusTimeoutId) {
-                clearTimeout(state.statusTimeoutId);
-            }
+            state.clearTimeouts();
             
             elements.status.textContent = message;
             elements.status.className = 'status ' + (isError ? 'error' : 'success');
@@ -655,7 +892,7 @@
             state.statusTimeoutId = setTimeout(() => {
                 elements.status.style.display = 'none';
                 state.statusTimeoutId = null;
-            }, STATUS_TIMEOUT);
+            }, UI_CONSTANTS.STATUS_TIMEOUT);
         }
 
         /**
@@ -669,7 +906,7 @@
                 return false;
             }
 
-            if (!file.name.match(/\.(mid|midi)$/i)) {
+            if (!REGEX_PATTERNS.MIDI_FILE.test(file.name)) {
                 showStatus('Please upload a valid MIDI file (.mid or .midi)', true);
                 return false;
             }
@@ -679,8 +916,8 @@
                 return false;
             }
             
-            if (file.size > 10 * 1024 * 1024) { // 10MB limit
-                showStatus('File is too large. Maximum size is 10MB', true);
+            if (file.size > MIDI_CONSTANTS.MAX_FILE_SIZE) {
+                showStatus(`File is too large. Maximum size is ${MIDI_CONSTANTS.MAX_FILE_SIZE / (1024 * 1024)}MB`, true);
                 return false;
             }
 
@@ -696,11 +933,10 @@
                 return;
             }
 
+            // Update file info display
             elements.fileInfo.textContent = `Selected: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`;
             
-            // Show loading state
-            elements.uploadArea.style.opacity = '0.6';
-            elements.uploadArea.style.pointerEvents = 'none';
+            elements.setLoadingState(true);
 
             const reader = new FileReader();
             
@@ -710,46 +946,48 @@
                     const midiData = parseMIDI(arrayBuffer);
                     state.currentMidiData = midiData;
                     
-                    // Set detected tempo in input field
+                    // Set detected tempo
                     elements.tempoInput.value = midiData.bpm || MIDI_CONSTANTS.DEFAULT_BPM;
                     
-                    // Auto-detect if this might be a fast song and suggest speed multiplier
+                    // Auto-detect fast songs
                     const detectedBPM = midiData.bpm || MIDI_CONSTANTS.DEFAULT_BPM;
-                    if (detectedBPM < 140 && midiData.notes.length > 50) {
-                        // Likely a fast song with low detected BPM - suggest 2x speed
+                    if (detectedBPM < UI_CONSTANTS.AUTO_SPEED_DETECT_THRESHOLD_BPM && 
+                        midiData.notes.length > UI_CONSTANTS.AUTO_SPEED_DETECT_MIN_NOTES) {
                         elements.speedMultiplier.value = "2";
                     }
                     
-                    const speedMult = parseFloat(elements.speedMultiplier.value);
+                    // Generate GRUB tune
+                    const speedMult = safeParseFloat(elements.speedMultiplier.value, 1);
                     const grubTune = convertToGrubTune(midiData, null, speedMult);
                     
                     state.currentOutput = grubTune;
                     elements.output.textContent = grubTune;
                     elements.outputArea.style.display = 'block';
                     
+                    // Show success message
                     const noteCount = midiData.notes.length;
                     const usedNotes = Math.min(noteCount, MIDI_CONSTANTS.MAX_GRUB_NOTES);
                     const statusMsg = `✓ Conversion successful! Detected tempo: ${midiData.bpm || MIDI_CONSTANTS.DEFAULT_BPM} BPM. ` +
                                     `Converted ${usedNotes} note${usedNotes !== 1 ? 's' : ''}` +
-                                    (noteCount > MIDI_CONSTANTS.MAX_GRUB_NOTES ? ` (${noteCount - MIDI_CONSTANTS.MAX_GRUB_NOTES} notes truncated)` : '');
+                                    (noteCount > MIDI_CONSTANTS.MAX_GRUB_NOTES ? 
+                                        ` (${noteCount - MIDI_CONSTANTS.MAX_GRUB_NOTES} notes truncated)` : '');
                     
                     showStatus(statusMsg);
                 } catch (error) {
                     showStatus('Error: ' + error.message, true);
                     console.error('MIDI processing error:', error);
                     elements.outputArea.style.display = 'none';
+                    state.reset();
                 } finally {
-                    // Reset loading state
-                    elements.uploadArea.style.opacity = '1';
-                    elements.uploadArea.style.pointerEvents = 'auto';
+                    elements.setLoadingState(false);
                 }
             };
             
             reader.onerror = function(error) {
                 showStatus('Error reading file: ' + (error.message || 'Unknown error'), true);
                 console.error('FileReader error:', error);
-                elements.uploadArea.style.opacity = '1';
-                elements.uploadArea.style.pointerEvents = 'auto';
+                elements.setLoadingState(false);
+                state.reset();
             };
             
             reader.readAsArrayBuffer(file);
@@ -759,7 +997,7 @@
         // EVENT LISTENERS
         // ============================================================================
         
-        // Upload area interactions
+        // Upload area click handler
         elements.uploadArea.addEventListener('click', () => {
             elements.fileInput.click();
         });
@@ -772,7 +1010,7 @@
             }
         });
 
-        // File input change
+        // File input change handler
         elements.fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 handleFile(e.target.files[0]);
@@ -782,26 +1020,25 @@
         // Drag and drop handlers
         elements.uploadArea.addEventListener('dragover', (e) => {
             e.preventDefault();
-            elements.uploadArea.classList.add('drag-over');
+            elements.uploadArea.classList.add(UI_CONSTANTS.DRAG_OVER_CLASS);
         });
 
         elements.uploadArea.addEventListener('dragleave', (e) => {
-            // Only remove if leaving the upload area itself
             if (e.target === elements.uploadArea) {
-                elements.uploadArea.classList.remove('drag-over');
+                elements.uploadArea.classList.remove(UI_CONSTANTS.DRAG_OVER_CLASS);
             }
         });
 
         elements.uploadArea.addEventListener('drop', (e) => {
             e.preventDefault();
-            elements.uploadArea.classList.remove('drag-over');
+            elements.uploadArea.classList.remove(UI_CONSTANTS.DRAG_OVER_CLASS);
             
             if (e.dataTransfer.files.length > 0) {
                 handleFile(e.dataTransfer.files[0]);
             }
         });
 
-        // Copy to clipboard
+        // Copy to clipboard handler
         elements.copyBtn.addEventListener('click', async () => {
             try {
                 await navigator.clipboard.writeText(state.currentOutput);
@@ -812,6 +1049,7 @@
                 textArea.value = state.currentOutput;
                 textArea.style.position = 'fixed';
                 textArea.style.left = '-999999px';
+                textArea.setAttribute('aria-hidden', 'true');
                 document.body.appendChild(textArea);
                 textArea.select();
                 
@@ -827,53 +1065,56 @@
             }
         });
 
-        // Update tempo and regenerate
+        // Update tempo button handler
         elements.updateTempoBtn.addEventListener('click', () => {
             if (!state.currentMidiData) {
                 showStatus('Please upload a MIDI file first', true);
                 return;
             }
             
-            const newTempo = parseInt(elements.tempoInput.value);
-            if (isNaN(newTempo) || newTempo < MIDI_CONSTANTS.MIN_BPM || newTempo > MIDI_CONSTANTS.MAX_BPM) {
-                showStatus(`Please enter a valid tempo (${MIDI_CONSTANTS.MIN_BPM}-${MIDI_CONSTANTS.MAX_BPM} BPM)`, true);
+            const newTempo = safeParseInt(elements.tempoInput.value);
+            if (newTempo < MIDI_CONSTANTS.MIN_BPM || newTempo > MIDI_CONSTANTS.MAX_BPM) {
+                showStatus(
+                    `Please enter a valid tempo (${MIDI_CONSTANTS.MIN_BPM}-${MIDI_CONSTANTS.MAX_BPM} BPM)`, 
+                    true
+                );
                 return;
             }
             
             try {
-                // Get speed multiplier
-                const speedMult = parseFloat(elements.speedMultiplier.value);
+                const speedMult = safeParseFloat(elements.speedMultiplier.value, 1);
                 const finalTempo = Math.round(newTempo * speedMult);
                 
-                // Regenerate GRUB tune with new tempo and speed multiplier
                 const grubTune = convertToGrubTune(state.currentMidiData, newTempo, speedMult);
                 state.currentOutput = grubTune;
                 elements.output.textContent = grubTune;
                 
-                showStatus(`✓ Settings updated! Base tempo: ${newTempo} BPM, Speed: ${speedMult}x, Final: ${finalTempo} BPM`);
+                showStatus(
+                    `✓ Settings updated! Base tempo: ${newTempo} BPM, Speed: ${speedMult}x, Final: ${finalTempo} BPM`
+                );
             } catch (error) {
                 showStatus('Error updating settings: ' + error.message, true);
                 console.error('Settings update error:', error);
             }
         });
 
-        // Download as file
+        // Download button handler
         elements.downloadBtn.addEventListener('click', () => {
             try {
                 const blob = new Blob([state.currentOutput], { type: 'text/plain;charset=utf-8' });
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'grub_init_tune.txt';
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'grub_init_tune.txt';
+                link.style.display = 'none';
+                document.body.appendChild(link);
+                link.click();
                 
                 // Clean up
                 setTimeout(() => {
-                    document.body.removeChild(a);
+                    document.body.removeChild(link);
                     URL.revokeObjectURL(url);
-                }, 100);
+                }, UI_CONSTANTS.DOWNLOAD_CLEANUP_DELAY);
                 
                 showStatus('✓ File downloaded!');
             } catch (error) {
@@ -887,55 +1128,69 @@
         // ============================================================================
         
         /**
-         * Plays a GRUB tune using the Web Audio API
+         * Parses a GRUB tune string into playable notes
          * @param {string} grubTuneString - The GRUB_INIT_TUNE formatted string
+         * @returns {{tempo: number, notes: Array}} Parsed tempo and notes
+         * @throws {Error} If format is invalid
          */
-        async function playTune(grubTuneString) {
-            // Parse GRUB_INIT_TUNE format
-            const match = grubTuneString.match(/GRUB_INIT_TUNE="(\d+)((?:\s+\d+\s+\d+)+)"/);
+        function parseGrubTune(grubTuneString) {
+            const match = grubTuneString.match(REGEX_PATTERNS.GRUB_TUNE);
             if (!match) {
-                showStatus('Invalid GRUB_INIT_TUNE format', true);
-                return;
+                throw new Error('Invalid GRUB_INIT_TUNE format');
             }
 
-            const tempo = parseInt(match[1]);
+            const tempo = safeParseInt(match[1]);
             const noteString = match[2].trim();
-            const noteParts = noteString.split(/\s+/);
+            const noteParts = noteString.split(REGEX_PATTERNS.WHITESPACE);
             
             const notes = [];
             for (let i = 0; i < noteParts.length; i += 2) {
                 if (i + 1 < noteParts.length) {
-                    notes.push({
-                        frequency: parseInt(noteParts[i]),
-                        duration: parseInt(noteParts[i + 1])
-                    });
+                    const frequency = safeParseInt(noteParts[i]);
+                    const duration = safeParseInt(noteParts[i + 1]);
+                    
+                    if (frequency > 0 && duration > 0) {
+                        notes.push({ frequency, duration });
+                    }
                 }
             }
-
+            
+            return { tempo, notes };
+        }
+        
+        /**
+         * Plays a GRUB tune using the Web Audio API
+         * @param {string} grubTuneString - The GRUB_INIT_TUNE formatted string
+         */
+        async function playTune(grubTuneString) {
             try {
+                const { tempo, notes } = parseGrubTune(grubTuneString);
+                
                 if (notes.length === 0) {
                     showStatus('No notes to play', true);
                     return;
                 }
 
-                // Initialize Web Audio API
+                // Initialize or resume audio context
                 if (!state.audioContext || state.audioContext.state === 'closed') {
                     state.audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 }
                 
-                // Resume audio context if suspended (required in some browsers)
                 if (state.audioContext.state === 'suspended') {
                     await state.audioContext.resume();
                 }
 
+                // Update UI state
                 state.isPlaying = true;
                 state.stopPlayback = false;
+                state.activeOscillators = [];
                 elements.playBtn.style.display = 'none';
                 elements.stopBtn.style.display = 'inline-block';
 
                 let baseTime = state.audioContext.currentTime;
                 let totalDuration = 0;
 
+                // Schedule all notes
                 for (let i = 0; i < notes.length; i++) {
                     if (state.stopPlayback) break;
 
@@ -943,48 +1198,46 @@
                     const oscillator = state.audioContext.createOscillator();
                     const gainNode = state.audioContext.createGain();
 
-                    // Calculate note duration: (60 / tempo) * duration
                     const noteDuration = (60 / tempo) * note.duration;
                     
                     oscillator.type = 'square'; // PC speaker-like sound
                     oscillator.frequency.value = note.frequency;
-                    
-                    // Constant gain (like PC speaker)
-                    gainNode.gain.value = AUDIO_GAIN;
+                    gainNode.gain.value = UI_CONSTANTS.AUDIO_GAIN;
 
                     oscillator.connect(gainNode);
                     gainNode.connect(state.audioContext.destination);
 
                     oscillator.start(baseTime);
                     oscillator.stop(baseTime + noteDuration);
+                    
+                    state.activeOscillators.push(oscillator);
 
                     baseTime += noteDuration;
                     totalDuration += noteDuration;
                 }
 
                 // Schedule playback completion
-                const timeoutId = setTimeout(() => {
+                state.playbackTimeoutId = setTimeout(() => {
                     if (!state.stopPlayback) {
                         state.isPlaying = false;
+                        state.activeOscillators = [];
                         elements.playBtn.style.display = 'inline-block';
                         elements.stopBtn.style.display = 'none';
                         showStatus('✓ Playback finished!');
                     }
                 }, totalDuration * 1000);
                 
-                // Store timeout ID for cleanup
-                state.playbackTimeoutId = timeoutId;
-                
             } catch (error) {
                 showStatus('Playback error: ' + error.message, true);
                 console.error('Audio playback error:', error);
                 state.isPlaying = false;
+                state.activeOscillators = [];
                 elements.playBtn.style.display = 'inline-block';
                 elements.stopBtn.style.display = 'none';
             }
         }
 
-        // Play button
+        // Play button handler
         elements.playBtn.addEventListener('click', () => {
             if (!state.currentOutput) {
                 showStatus('No tune to play', true);
@@ -993,21 +1246,23 @@
             playTune(state.currentOutput);
         });
 
-        // Stop button
+        // Stop button handler
         elements.stopBtn.addEventListener('click', () => {
             state.stopPlayback = true;
             state.isPlaying = false;
             elements.playBtn.style.display = 'inline-block';
             elements.stopBtn.style.display = 'none';
             
-            // Clear playback timeout
+            // Clear timeout and stop oscillators
             if (state.playbackTimeoutId) {
                 clearTimeout(state.playbackTimeoutId);
                 state.playbackTimeoutId = null;
             }
             
-            // Close and recreate audio context to stop all sounds immediately
-            if (state.audioContext) {
+            state.stopAllOscillators();
+            
+            // Close audio context for immediate silence
+            if (state.audioContext && state.audioContext.state !== 'closed') {
                 state.audioContext.close().then(() => {
                     state.audioContext = null;
                 }).catch(err => {
@@ -1019,41 +1274,34 @@
             showStatus('⏹️ Playback stopped');
         });
         
-        // Tempo input validation
-        elements.tempoInput.addEventListener('input', (e) => {
-            const value = parseInt(e.target.value);
-            if (!isNaN(value)) {
-                if (value < MIDI_CONSTANTS.MIN_BPM) {
-                    e.target.value = MIDI_CONSTANTS.MIN_BPM;
-                } else if (value > MIDI_CONSTANTS.MAX_BPM) {
-                    e.target.value = MIDI_CONSTANTS.MAX_BPM;
-                }
+        // Tempo input validation with debouncing
+        const debouncedTempoValidation = debounce((value) => {
+            const parsed = safeParseInt(value);
+            if (parsed < MIDI_CONSTANTS.MIN_BPM) {
+                elements.tempoInput.value = MIDI_CONSTANTS.MIN_BPM;
+            } else if (parsed > MIDI_CONSTANTS.MAX_BPM) {
+                elements.tempoInput.value = MIDI_CONSTANTS.MAX_BPM;
             }
+        }, 300);
+        
+        elements.tempoInput.addEventListener('input', (e) => {
+            debouncedTempoValidation(e.target.value);
         });
         
         // Speed multiplier change handler
         elements.speedMultiplier.addEventListener('change', () => {
             if (state.currentMidiData) {
-                // Auto-update when speed multiplier changes
                 elements.updateTempoBtn.click();
             }
         });
         
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {
-            if (state.audioContext) {
-                state.audioContext.close();
-            }
-            if (state.statusTimeoutId) {
-                clearTimeout(state.statusTimeoutId);
-            }
-            if (state.playbackTimeoutId) {
-                clearTimeout(state.playbackTimeoutId);
-            }
+            state.cleanup();
         });
         
         // Log initialization
-        console.log('MIDI to GRUB_INIT_TUNE Converter initialized');
+        console.log('MIDI to GRUB_INIT_TUNE Converter v2.2.0 initialized');
     </script>
 </body>
 </html>
